@@ -53,17 +53,29 @@ def benchmark_prefill(model, tokenizer, device, batches, seq_lens, warmup, measu
             def fn():
                 with torch.inference_mode():
                     model(input_ids=input_ids, attention_mask=attention_mask)
-            res = measure_kernel(fn, warmup=warmup, measure=measure, trials=trials, device=device)
-            mem = memory_stats()
-            tokens = b * s
-            throughput = [tokens / (t / 1000.0) for t in res["times_ms"]]
-            prefill_results.append({
-                "batch": b,
-                "seq_len": s,
-                "timing": res["stats"],
-                "throughput_toks_per_s": compute_stats(throughput),
-                "memory": mem,
-            })
+            try:
+                res = measure_kernel(fn, warmup=warmup, measure=measure, trials=trials, device=device)
+                mem = memory_stats()
+                tokens = b * s
+                throughput = [tokens / (t / 1000.0) for t in res["times_ms"]]
+                prefill_results.append({
+                    "batch": b,
+                    "seq_len": s,
+                    "timing": res["stats"],
+                    "throughput_toks_per_s": compute_stats(throughput),
+                    "memory": mem,
+                })
+            except RuntimeError as e:
+                # OOM or other CUDA error: record and skip this (and larger seq for same batch)
+                prefill_results.append({
+                    "batch": b,
+                    "seq_len": s,
+                    "error": str(e),
+                })
+                # For this batch size, larger seq_len will be worse; break inner loop
+                del input_ids, attention_mask
+                torch.cuda.empty_cache()
+                break
             del input_ids, attention_mask
             torch.cuda.empty_cache()
     return prefill_results
@@ -80,18 +92,30 @@ def benchmark_decode(model, tokenizer, device, batches, ctx_lens, gen_lens, warm
                 def fn():
                     with torch.inference_mode():
                         model.generate(input_ids=input_ids, attention_mask=attention_mask, **gen_kwargs)
-                res = measure_kernel(fn, warmup=warmup, measure=measure, trials=trials, device=device)
-                mem = memory_stats()
-                tokens = b * gen
-                throughput = [tokens / (t / 1000.0) for t in res["times_ms"]]
-                decode_results.append({
-                    "batch": b,
-                    "context_len": ctx,
-                    "gen_len": gen,
-                    "timing": res["stats"],
-                    "throughput_toks_per_s": compute_stats(throughput),
-                    "memory": mem,
-                })
+                try:
+                    res = measure_kernel(fn, warmup=warmup, measure=measure, trials=trials, device=device)
+                    mem = memory_stats()
+                    tokens = b * gen
+                    throughput = [tokens / (t / 1000.0) for t in res["times_ms"]]
+                    decode_results.append({
+                        "batch": b,
+                        "context_len": ctx,
+                        "gen_len": gen,
+                        "timing": res["stats"],
+                        "throughput_toks_per_s": compute_stats(throughput),
+                        "memory": mem,
+                    })
+                except RuntimeError as e:
+                    decode_results.append({
+                        "batch": b,
+                        "context_len": ctx,
+                        "gen_len": gen,
+                        "error": str(e),
+                    })
+                    del input_ids, attention_mask
+                    torch.cuda.empty_cache()
+                    # For this (b, ctx), larger gen will be worse; break inner gen loop
+                    break
                 del input_ids, attention_mask
                 torch.cuda.empty_cache()
     return decode_results
@@ -151,21 +175,8 @@ def main():
         decode_ctx = [c for c in decode_ctx if c <= args.max_decode_ctx]
     decode_gen = [64, 128]
 
-    try:
-        prefill = benchmark_prefill(model, tokenizer, args.device, prefill_batches, prefill_seqs, warmup=10, measure=30, trials=3)
-    except RuntimeError as e:
-        # OOM fallback: drop longest seq
-        prefill_seqs = [256, 512, 1024, 2048]
-        prefill = benchmark_prefill(model, tokenizer, args.device, prefill_batches, prefill_seqs, warmup=10, measure=30, trials=3)
-        config["note"] = f"OOM on long seq, retried without 4096. Error: {e}"
-
-    try:
-        decode = benchmark_decode(model, tokenizer, args.device, decode_batches, decode_ctx, decode_gen, warmup=5, measure=30, trials=3)
-    except RuntimeError as e:
-        decode_ctx = [512, 1024]
-        decode_gen = [64]
-        decode = benchmark_decode(model, tokenizer, args.device, decode_batches, decode_ctx, decode_gen, warmup=5, measure=30, trials=3)
-        config["decode_note"] = f"OOM on long decode, reduced ctx/gen. Error: {e}"
+    prefill = benchmark_prefill(model, tokenizer, args.device, prefill_batches, prefill_seqs, warmup=10, measure=30, trials=3)
+    decode = benchmark_decode(model, tokenizer, args.device, decode_batches, decode_ctx, decode_gen, warmup=5, measure=30, trials=3)
 
     raw = {
         "prefill": prefill,

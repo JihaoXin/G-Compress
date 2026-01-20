@@ -46,6 +46,11 @@
 - `run_llm.sbatch`: args `--variant`, `--suite`, `--results_root`, `--run_id`; `conda activate gc`
 - `launch_llm_night.sh`: submit 6 jobs; unique run_id (timestamp + exp); logs → `slurm_logs/<exp>_%j.(out|err)`
 
+### Job Submission Policy
+- **Short validations**: use `srun --gres=gpu:a100:1 --pty bash` to get an interactive GPU shell, then run quick tests.
+- **Long/overnight runs**: use `sbatch` with the provided Slurm scripts.
+- **Email notifications**: all Slurm jobs should set `--mail-type=END,FAIL` and `--mail-user=jihao.xin@kaust.edu.sa` so results are visible even if not monitoring interactively.
+
 ## File Layout
 - `src/gcompress_bench/{llm_run.py,llm_eval.py,palu_loader.py,metrics.py}`
 - `scripts/plot_llm_results.py`

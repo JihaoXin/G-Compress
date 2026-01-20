@@ -7,6 +7,8 @@
 #SBATCH --time=12:00:00
 #SBATCH --output=slurm_logs/%x_%j.out
 #SBATCH --error=slurm_logs/%x_%j.err
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=jihao.xin@kaust.edu.sa
 
 set -e
 
@@ -14,7 +16,7 @@ source ~/.bashrc
 conda activate gc
 cd $SLURM_SUBMIT_DIR
 
-export PYTHONPATH="$SLURM_SUBMIT_DIR/src:$PYTHONPATH"
+export PYTHONPATH="$SLURM_SUBMIT_DIR:$SLURM_SUBMIT_DIR/src:$SLURM_SUBMIT_DIR/third_party/palu:$PYTHONPATH"
 export TRANSFORMERS_OFFLINE=1
 export HF_HOME=${HF_HOME:-$HOME/.cache/huggingface}
 
