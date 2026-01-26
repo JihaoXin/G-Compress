@@ -375,11 +375,132 @@ C5_validation:
           修复上述问题后，使用正确的维度分析和 repair 逻辑重新验证
 
 c5_status_summary:
-  date: "2026-01-25"
-  status: "BLOCKED"
-  blocker: "维度分析代码与 PaLU 模型结构不匹配"
+  date: "2026-01-26"
+  status: "BLOCKED - FUNDAMENTAL ISSUE"
+  blocker: |
+    所有可用的 PaLU checkpoint（ratio 0.5-0.9）都使用了 32-倍数量化约束，
+    维度 100% 对齐。维度坍塌问题不存在于当前可用模型中。
   validated: false
-  next_action: "修复 analyze_palu_dimensions() 并重跑 C5 实验"
+  next_action: "采用文字修改方案，弱化 E2E 验证主张"
+
+  # 2026-01-26 第三轮分析 - 最终确认
+  detailed_analysis_v3:
+    date: "2026-01-26"
+    analyst: "researcher_agent"
+
+    definitive_finding: |
+      经过全面检查所有可用 PaLU 模型（24 个 checkpoint，ratio 0.5-0.9），
+      所有模型的 head_wise_ranks 都是 32 的倍数，100% 8-aligned。
+
+      "~97% 维度不对齐" 的数据来源于 RAP 的理论分析
+      (third_party/RAP/results/attention_size/*_retain0.8.json)，
+      这是 Fisher 信息计算的"理想" rank 分配，
+      而非实际 PaLU 压缩结果。
+
+    verified_data:
+      all_palu_checkpoints_checked: 24
+      all_checkpoints_8_aligned: "100%"
+      rap_theoretical_analysis_aligned: "3.1%"
+      source_of_97_percent_claim: "RAP 理论分析，非实际模型"
+
+    code_correctness:
+      analyze_palu_dimensions: |
+        代码逻辑正确。检测 HeadwiseLowRankModule.ranks 并报告 0% misalignment
+        是因为实际模型维度确实对齐。不需要修复代码。
+
+    experiment_design_issue:
+      description: |
+        C5 实验设计假设：PaLU 压缩产生不对齐维度
+        实际情况：PaLU 使用量化约束，强制 rank 对齐到 32 的倍数
+        结论：C5 实验的前提条件不成立
+
+    resolution:
+      recommended: "文字修改方案"
+      actions:
+        - "更新论文，明确 scope：维度坍塌发生在非量化 SVD 压缩场景"
+        - "保留 C4 微基准（使用人工构造的不对齐维度）作为主要证据"
+        - "C5 数据用于展示 PaLU 的 decode 加速 (11.5x)，但不用于 repair 效果验证"
+        - "在 limitations 中说明：当前 PaLU 实现已内置对齐约束"
+
+  # 2026-01-26 深入分析 (第一轮 - 已过时)
+  detailed_analysis_v1:
+    date: "2026-01-26"
+    analyst: "researcher_agent"
+    status: "SUPERSEDED by v2"
+    note: "原分析认为是导入问题，实际问题更根本"
+
+  # 2026-01-26 深入分析 (第二轮 - 最终)
+  detailed_analysis_v2:
+    date: "2026-01-26"
+    analyst: "researcher_agent"
+
+    critical_finding: |
+      当前使用的 PaLU 模型 (ratio=0.7, gs=4) 的维度本身就是完全对齐的！
+      这不是代码 bug，而是实验设计问题。
+
+    evidence:
+      - source: "PaLU config.json"
+        path: "/home/xinj/rap/submodules/palu/Meta-Llama-3-8B-Instruct_ratio-0.7_gs-4-fisher_uniform-svd/config.json"
+        observation: |
+          head_wise_ranks 中所有值都是 32 的倍数:
+          [160, 192, 224, 256, 288, 352, 384, 416, 448, 480, 512]
+          8-aligned: 100%, 16-aligned: 100%, 32-aligned: 100%
+      - source: "C5 experiment output"
+        path: "results/C5/20260125_000525_C5_e2e_comparison/report.md"
+        observation: |
+          Before/After Repair 完全相同:
+          - Misaligned dimensions: 0.0%
+          - Unique dims: [320, 384, 448, 512, 576, 704, 768, 832, 896, 960, 1024]
+          - Affected layers: 0
+      - source: "palu_dim_dist 数据 (不同模型)"
+        path: "results/palu_dim_dist/llama3_r0.8/dims.json"
+        observation: |
+          retain_ratio=0.8 的模型有不对齐维度:
+          per_head_dims: [114, 116, 117, 118, 120, 121, 122, 123, 124, 125]
+          约 97% 不是 8 的倍数
+
+    root_cause_analysis:
+      issue_1_model_already_aligned:
+        description: "ratio=0.7 的 PaLU 模型产生对齐的 rank 值"
+        detail: |
+          PaLU 的 Fisher 信息 + 均匀量化策略在 ratio=0.7 时
+          产生的 rank 值恰好都是 32 的倍数
+        impact: "C5 实验的前提条件不存在"
+
+      issue_2_data_source_mismatch:
+        description: "findings.yaml 中 ~97% 不对齐的数据来自不同模型"
+        detail: |
+          - palu_dim_dist 分析的是 retain_ratio=0.8
+          - C5 实验使用的是 ratio=0.7
+          这是两个不同的压缩配置
+        impact: "数据不一致导致错误预期"
+
+      issue_3_ranks_semantic:
+        description: "HeadwiseLowRankModule.ranks 是 GROUP-level 而非 per-head"
+        detail: |
+          ranks=[160, 160] 表示 2 个 group 各有 rank=160
+          不是 per-head 的维度，per-head dim = rank / heads_per_group
+        impact: "代码逻辑正确但解释有误"
+
+    difficulty_assessment:
+      level: "HARD"
+      rationale:
+        - "不是代码 bug，是实验设计和模型选择问题"
+        - "需要获取或重新压缩 retain_ratio=0.8 的 PaLU 模型"
+        - "或者修改 PaLU 压缩参数禁用内部对齐约束"
+
+    recommended_action: "降级到文字修改方案"
+
+    text_modification_plan:
+      - "更新论文表述，明确 C5 使用的是 ratio=0.7（已对齐）"
+      - "将 dimension repair 验证限制在 C4 微基准测试"
+      - "强调 ratio=0.8 等高压缩比场景下维度坍塌更严重"
+      - "保留 C4 的 +27% speedup 结论作为主要证据"
+
+    alternative_if_e2e_required:
+      - "获取 retain_ratio=0.8 的完整 PaLU checkpoint"
+      - "或使用 third_party/RAP/results 中的维度数据重新压缩模型"
+      - "预计需要额外 2-4 小时 GPU 时间"
 
 # 关键洞察（跨阶段）
 key_insights:
@@ -389,9 +510,35 @@ key_insights:
     implications: "压缩算法必须考虑硬件对齐约束"
 
   - id: "I2"
-    insight: "PaLU/SVD 等低秩压缩方法系统性地产生不对齐维度"
+    insight: "低秩 SVD 压缩理论上会产生不对齐维度，但实际实现可能有对齐约束"
     supporting_findings: ["F1.3", "F1.4"]
     implications: "需要在压缩后添加维度修复 pass，或在压缩算法中引入对齐约束"
+    caveat_added: "2026-01-26"
+    status: "REQUIRES CLARIFICATION"
+    caveat: |
+      【重要澄清】2026-01-26 最终确认：
+      - ~97% 不对齐数据来自 RAP 的理论分析，非实际 PaLU 压缩结果
+      - 实际 PaLU checkpoint (ratio 0.5-0.9) 全部 100% 对齐
+      - PaLU 使用 Fisher + 均匀量化策略，强制 rank 对齐到 32 的倍数
+      - 维度坍塌问题存在于：(1) 未量化的 SVD 压缩，(2) 理论 rank 分配
+      - 论文 scope 需要明确这一点
+
+  - id: "I5"
+    date: "2026-01-26"
+    insight: "PaLU 实现使用量化约束，强制 rank 对齐到 32 的倍数"
+    supporting_findings: ["F5.1", "F5.4"]
+    status: "CORRECTED"
+    original_hypothesis: |
+      (错误) ratio=0.8 产生 ~97% 不对齐维度
+    corrected_understanding: |
+      所有 PaLU checkpoint (ratio 0.5-0.9) 都是 100% 对齐的。
+      ~97% 不对齐的数据来自 RAP 的理论分析，非实际压缩结果。
+      PaLU 的 Fisher + 均匀量化策略会将 rank 对齐到 32 的倍数。
+    implications: |
+      1. 当前 PaLU 实现不会产生维度坍塌
+      2. 维度坍塌发生在未量化的 SVD 压缩场景
+      3. 论文需要明确说明这一限制
+      4. C4 微基准（人工不对齐维度）仍是有效证据
 
   - id: "I3"
     date: "2026-01-24"

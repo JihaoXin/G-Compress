@@ -9,6 +9,7 @@
 #SBATCH --error=slurm_logs/%j_C5_e2e_comparison.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 # C5 End-to-End LLM Inference Comparison
 # Compares: Baseline vs PaLU vs PaLU+Repair

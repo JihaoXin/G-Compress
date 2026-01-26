@@ -9,6 +9,7 @@
 #SBATCH --error=slurm_logs/%j_C4_dim_repair.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 set -e
 

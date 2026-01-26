@@ -96,12 +96,13 @@ nohup python auto_research/orchestrator.py --max-days 3 > auto_research/logs/orc
 ```
 
 关键文件：
-- `auto_research/state/research_state.yaml` - 研究状态追踪
-- `auto_research/state/findings.yaml` - 发现汇总
-- `auto_research/agents/*.prompt` - 4 个专业 Agent 提示词
-- `auto_research/logs/` - 迭代日志
+- `auto_research/orchestrator.py` - 主流程
+- `auto_research/memory.py` - 极简 Memory（分数追踪、停滞检测）
+- `auto_research/agents/*.prompt` - 7 个 Agent prompts
+- `auto_research/state/` - 状态文件
+- `auto_research/logs/` - 运行日志
 
-研究阶段：C1(量化) → C2(原因探究) → C3(形式化) → C4(解决方案) → C5(验证)
+架构：Reviewer → Planner（自主决策）→ 执行 Actions → Validator
 
 目标产出：
 - `report.md` - 中文报告
@@ -113,7 +114,7 @@ nohup python auto_research/orchestrator.py --max-days 3 > auto_research/logs/orc
 
 - **默认机器**：`--constraint=gpu_a100`
 - **大显存任务**（完整 LLM 实验）：`--constraint=gpu_a100_80gb`
-- **快速验证**（< 3 分钟）：用 `srun --gres=gpu:a100:1 --constraint=gpu_a100 --pty bash`
+- **快速验证**（< 3 分钟）：用 `srun --gres=gpu:a100:1 --constraint=gpu_a100 --qos=spot --pty bash`
 - **其他任务**：创建 sbatch 脚本并提交
 
 参考模板：`slurm/run_bench.sbatch`

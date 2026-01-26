@@ -9,6 +9,7 @@
 #SBATCH --error=slurm_logs/%j_bench.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 set -e  # Exit on error
 

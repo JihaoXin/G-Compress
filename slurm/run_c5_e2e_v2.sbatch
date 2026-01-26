@@ -9,6 +9,7 @@
 #SBATCH --error=slurm_logs/%j_c5_e2e_v2.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 set -e
 source ~/.bashrc

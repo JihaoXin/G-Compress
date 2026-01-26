@@ -18,14 +18,16 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题。
 
 - **默认机器**：`--constraint=gpu_a100`
 - **大显存任务**（LLM 完整实验）：`--constraint=gpu_a100_80gb`
-- **快速验证**（< 3 分钟）：用 `srun --gres=gpu:a100:1 --constraint=gpu_a100 --pty bash`
+- **快速验证**（< 3 分钟）：用 `srun --gres=gpu:a100:1 --constraint=gpu_a100 --qos=spot --pty bash`
 - **其他任务**：创建 sbatch 脚本并提交
 
 ## Sbatch 脚本模板
 
+**重要：作业名称必须以 `GAC_` 开头**，这样 AutoGAC 系统才能正确追踪作业状态。
+
 ```bash
 #!/bin/bash
-#SBATCH --job-name=<任务名>
+#SBATCH --job-name=GAC_<任务名>
 #SBATCH --gres=gpu:a100:1
 #SBATCH --constraint=gpu_a100
 #SBATCH --cpus-per-task=8
@@ -35,6 +37,7 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题。
 #SBATCH --error=slurm_logs/%j_<名称>.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 set -e
 source ~/.bashrc
@@ -156,6 +159,7 @@ python -m scripts.run_experiment run --spec experiments/night_sweep.yaml --name 
 
 ## 注意事项
 
+- **作业命名**：`--job-name` 必须以 `GAC_` 开头（如 `GAC_ppl_eval`），否则系统无法追踪作业
 - 脚本要放在 `slurm/` 目录
 - 确保 `slurm_logs/` 目录存在
 - 使用时间戳命名结果目录

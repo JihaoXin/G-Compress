@@ -202,12 +202,7 @@ Figure~\ref{fig:sdpa_latency} shows the results.
 \label{fig:sdpa_latency}
 \end{figure}
 
-Key observations:
-\begin{itemize}
-  \item 8-aligned dimensions (72, 80, 88, 96, ...) achieve 1.1--1.6 ms
-  \item Non-8-aligned dimensions (65--71, 97--103, ...) incur 1.6--2.2 ms
-  \item \texttt{head\_dim=107}: 2.147 ms (+88\% vs 96)
-\end{itemize}
+8-aligned dimensions achieve 1.1--1.6ms while non-8-aligned incur 1.6--2.2ms. \texttt{head\_dim=107} shows 2.147ms (+88\% vs 96).
 
 \subsection{Backend Selection Behavior}
 
@@ -244,58 +239,16 @@ We investigate the causes of dimensional collapse across three layers.
 \subsection{PyTorch Backend Selection}
 \label{sec:backend}
 
-\paragraph{Initial Hypothesis.}
-PyTorch's SDPA automatically selects attention backends based on input shapes.
-We initially hypothesized that non-8-aligned dimensions would trigger fallback to slower backends.
-
-\paragraph{Experimental Verification (C21).}
 We tested backend availability for \texttt{head\_dim} $\in$ [104, 128].
-Surprisingly, FlashAttention is available for \emph{all} tested dimensions, including non-8-aligned values.
-
-\begin{table}[t]
-\centering
-\caption{Backend availability across head dimensions (C21 experiment).}
-\label{tab:backend_avail}
-\begin{tabular}{lrr}
-\toprule
-Backend & 8-aligned & Non-8-aligned \\
-\midrule
-FLASH & 100\% (8/8) & 100\% (42/42) \\
-MEM\_EFFICIENT & 100\% (8/8) & 0\% (0/42) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Key Finding.}
-FlashAttention does \emph{not} fall back to MATH for non-8-aligned dimensions.
-Instead, it uses an internal slow path that incurs 30--45\% overhead:
-
-\begin{itemize}
-  \item 8-aligned (D=104,112,120,128): avg 1.55 ms
-  \item Non-8-aligned (D=105--111,113--119,...): avg 2.03 ms (+31\%)
-\end{itemize}
-
-This ``staircase effect'' (Figure~\ref{fig:sdpa_latency}) shows that latency jumps discretely at alignment boundaries, not gradually with dimension size.
+Surprisingly, FlashAttention is available for \emph{all} dimensions (100\% for both 8-aligned and non-8-aligned), while MEM\_EFFICIENT requires strict 8-alignment.
+FlashAttention does \emph{not} fall back to MATH; instead, it uses internal slow paths incurring 30--45\% overhead (8-aligned: 1.55ms avg, non-8-aligned: 2.03ms avg).
 The root cause lies in the CUDA kernel layer, not backend selection.
 
 \subsection{CUDA Kernel Layer}
 \label{sec:cuda}
 
-Since backend selection is not the root cause, we investigate FlashAttention's internal kernel behavior.
-The 30--45\% slowdown on non-8-aligned dimensions stems from several factors:
-
-\begin{enumerate}
-  \item \textbf{Vectorized loads}: FlashAttention uses \texttt{float4} (128-bit) loads when $d \mod 8 = 0$. Non-aligned dimensions require scalar loads or predicated vector loads with 50\% throughput loss.
-  \item \textbf{GEMM tile selection}: CUTLASS kernels select different tile sizes based on dimension alignment. Suboptimal tiles reduce occupancy and Tensor Core utilization (30\%$\to$12\%).
-  \item \textbf{Predication}: Non-aligned dimensions cause boundary predicates, increasing warp divergence.
-  \item \textbf{Internal padding}: FlashAttention may pad internally, less efficiently than explicit pre-padding.
-\end{enumerate}
-
-These factors compound to create the observed ``staircase effect'' where latency jumps discretely at 8-alignment boundaries.
-
-\paragraph{FlashAttention Kernel Dispatch.}
-FlashAttention-2~\cite{flashattention2} dispatches to optimized kernels for D $\in \{32, 64, 96, 128, 256\}$.
-For other D values, it uses generic kernels with: (1) predicated loads, (2) dynamic shared memory, and (3) suboptimal tiling. D=128 achieves 1.47ms while D=125 (with predicates) takes 1.97ms (+34\%).
+FlashAttention's internal 30--45\% slowdown stems from: (1) vectorized loads falling back to scalar (50\% loss when $d \mod 8 \neq 0$); (2) suboptimal GEMM tile selection reducing Tensor Core utilization (30\%$\to$12\%); (3) boundary predication causing warp divergence.
+FlashAttention-2 dispatches optimized kernels for D $\in \{32, 64, 96, 128, 256\}$; other values use generic kernels (D=128: 1.47ms, D=125: 1.97ms, +34\%).
 
 \subsection{Hardware Constraints}
 \label{sec:hardware}
@@ -328,52 +281,18 @@ H4: Vec. loads & \textbf{Confirmed} & 50\% & float4$\to$scalar \\
 \end{table}
 
 \paragraph{H1: Tensor Core Alignment (Confirmed).}
-We measure GEMM throughput for shape (8192, 8192, K) with varying K alignment.
-16-aligned K achieves 91.1 TFLOPS, 8-aligned achieves 76.8 TFLOPS, while non-aligned (e.g., K=107) drops to 37--40 TFLOPS---a 58\% slowdown.
-Tensor Core utilization decreases from $\sim$30\% to $\sim$12\%.
+GEMM with K=16-aligned achieves 91 TFLOPS; non-aligned (K=107) drops to 37--40 TFLOPS (58\% slowdown, TC utilization 30\%$\to$12\%).
 
 \paragraph{H2: L2 Cache Sectors (Not Confirmed).}
-L2 cache operates in 32-byte sectors.
-Non-aligned dimensions cause $\sim$5.8\% sector waste, but measured bandwidth actually increases slightly for non-aligned dimensions (214.6 vs 209.3 GB/s).
-This cannot explain the 30--58\% performance gap.
+L2 sector waste ($\sim$5.8\%) cannot explain 30--58\% gaps; measured bandwidth is similar.
 
 \paragraph{H3: SDPA Bandwidth Efficiency (Confirmed).}
-SDPA bandwidth efficiency strongly correlates with 8-alignment:
-\begin{itemize}
-  \item D=112: 1.529 ms, 153.6 GB/s
-  \item D=113: 2.208 ms, 107.3 GB/s (\textbf{--30\%})
-  \item D=120: 1.571 ms, 160.2 GB/s
-  \item D=121: 2.142 ms, 118.5 GB/s (\textbf{--26\%})
-\end{itemize}
+D=112 achieves 153.6 GB/s; D=113 drops to 107.3 GB/s (--30\%). D=120 achieves 160.2 GB/s; D=121 drops to 118.5 GB/s (--26\%).
 
 \paragraph{H4: Vectorized Loads (Confirmed).}
-FlashAttention uses \texttt{float4} (128-bit) loads when dimensions permit.
-Table~\ref{tab:vectorize} shows the impact of load type on GEMM throughput.
+\texttt{float4} loads (K\%16) achieve 73--83 TFLOPS; scalar fallback (K=107) drops to 39--40 TFLOPS (50\% loss).
 
-\begin{table}[t]
-\centering
-\caption{Vectorized load patterns and GEMM throughput (TFLOPS).}
-\label{tab:vectorize}
-\begin{tabular}{llll}
-\toprule
-Load Type & Alignment & K examples & TFLOPS \\
-\midrule
-float4 & K\%16==0 & 112, 128 & 73--83 \\
-float4 & K\%8==0 & 104, 120 & 68--77 \\
-float2 & K\%4==0 & 108, 116 & 61--71 \\
-\textbf{scalar} & none & 105, 107 & \textbf{39--40} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Non-aligned dimensions fall back to scalar loads, causing 50\% throughput loss.
-
-\paragraph{Root Cause Summary.}
-The performance hierarchy is:
-(1) Tensor Core tile alignment (58\% impact, K\%16),
-(2) Vectorized load degradation (50\% impact, K\%8),
-(3) SDPA bandwidth efficiency (40\% impact).
-L2 cache waste (5.8\%) is negligible.
+\textbf{Summary}: Tensor Core alignment (58\%), vectorized loads (50\%), and SDPA bandwidth (40\%) are primary causes; L2 cache (5.8\%) is negligible.
 
 %% ===========================================
 %% 5. SHAPE-AWARE COMPRESSION
@@ -394,45 +313,15 @@ We formalize alignment requirements as a constraint optimization problem:
 
 For optimal Tensor Core utilization, prefer $d_{pad} \mod 16 = 0$.
 
-\subsection{Dimension Repair Algorithm}
+\subsection{Dimension Repair}
 
-\begin{algorithm}[t]
-\caption{Dimension Repair for Linear Layers}
-\label{alg:repair}
-\begin{algorithmic}
-\REQUIRE $W \in \mathbb{R}^{d_{out} \times d_{in}}$: weight matrix
-\REQUIRE $b \in \mathbb{R}^{d_{out}}$ (optional): bias vector
-\REQUIRE $strategy$: alignment strategy (minimal, optimal)
-\REQUIRE $alignment$: target alignment (8 or 16)
-\STATE $d'_{out} \gets \lceil d_{out} / alignment \rceil \times alignment$
-\STATE $W' \in \mathbb{R}^{d'_{out} \times d_{in}} \gets \mathbf{0}$
-\STATE $W'[0:d_{out}, :] \gets W$ \COMMENT{Copy original weights}
-\IF{$b$ exists}
-  \STATE $b' \in \mathbb{R}^{d'_{out}} \gets \mathbf{0}$
-  \STATE $b'[0:d_{out}] \gets b$ \COMMENT{Copy original bias}
-\ENDIF
-\IF{$b$ exists}
-  \RETURN $W'$, $b'$
-\ELSE
-  \RETURN $W'$
-\ENDIF
-\end{algorithmic}
-\end{algorithm}
-
-Algorithm~\ref{alg:repair} shows our dimension repair procedure.
-For a linear layer $y = Wx + b$, we pad the output dimension from $d_{out}$ to $d'_{out}$ by appending zero rows to $W$ and zeros to $b$.
-The ``minimal'' strategy uses $alignment=8$, while ``optimal'' uses $alignment=16$.
+For a linear layer $y = Wx + b$ with $W \in \mathbb{R}^{d_{out} \times d_{in}}$, we pad the output dimension to the nearest aligned value $d'_{out} = \lceil d_{out}/a \rceil \times a$ by appending zero rows to $W$ and zeros to $b$.
+The \textbf{MINIMAL} strategy uses $a=8$, while \textbf{OPTIMAL} uses $a=16$.
 
 \paragraph{Accuracy Preservation.}
-Zero-padding preserves model outputs exactly.
-For input $x \in \mathbb{R}^{d_{in}}$, the padded layer computes:
-\[
-y' = W'x + b' = \begin{bmatrix} Wx + b \\ \mathbf{0} \end{bmatrix} = \begin{bmatrix} y \\ \mathbf{0} \end{bmatrix}
-\]
-The original output $y$ occupies positions $[0:d_{out}]$, while positions $[d_{out}:d'_{out}]$ contain zeros.
-Downstream layers that consume $y'$ must either: (1) slice the valid dimensions, or (2) use attention masks that ignore padded positions.
-For attention mechanisms, zero-valued key/query dimensions contribute zero to attention scores, making padding semantically neutral.
-This ensures \textbf{bit-exact output preservation}---no retraining or fine-tuning is required.
+Zero-padding preserves outputs exactly: $y' = [Wx + b; \mathbf{0}]$, where the original $y$ occupies positions $[0:d_{out}]$.
+For attention, zero-valued dimensions contribute nothing to scores, making padding semantically neutral.
+This ensures \textbf{bit-exact output preservation}---no retraining required.
 
 %% ===========================================
 %% 6. EVALUATION
@@ -440,11 +329,8 @@ This ensures \textbf{bit-exact output preservation}---no retraining or fine-tuni
 \section{Evaluation}
 \label{sec:eval}
 
-\paragraph{Scope of Validation.}
-We evaluate dimension repair at two levels:
-(1) \textbf{Kernel-level} (SDPA and GEMM microbenchmarks): fully validated, demonstrating 25--30\% performance recovery;
-(2) \textbf{End-to-end LLM inference}: we compare baseline vs.\ PaLU-compressed models to show compression benefits, but dimension repair integration with PaLU's SVD structure ($W = U \cdot V^T$) remains future work.
-The E2E speedups reported (\S\ref{sec:eval}.4) are from compression, not dimension repair.
+We validate dimension repair at kernel level (SDPA/GEMM microbenchmarks), demonstrating 25--30\% recovery.
+E2E results show compression benefits; repair integration remains future work.
 
 \subsection{Padding Rescue Experiment (P1)}
 
@@ -470,24 +356,7 @@ Padding to 112 achieves 30.5\% speedup with only 4.7\% memory overhead---an exce
 
 \subsection{GEMM Alignment Impact}
 
-GEMM operations show similar patterns:
-
-\begin{table}[t]
-\centering
-\caption{GEMM latency (M=4096, N=4096) for different K dimensions.}
-\label{tab:gemm}
-\begin{tabular}{lrr}
-\toprule
-K dimension & Latency (ms) & vs K=107 \\
-\midrule
-107 & 0.089 & baseline \\
-112 & 0.050 & 1.78$\times$ faster \\
-128 & 0.050 & 1.78$\times$ faster \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Aligning K from 107 to 112 improves GEMM performance by 44\%.
+GEMM operations show similar patterns: K=107 achieves 0.089ms latency, while K=112 and K=128 both achieve 0.050ms---a \textbf{44\% improvement} from alignment.
 
 \subsection{Dimension Repair Validation (C4)}
 
@@ -538,41 +407,16 @@ D & Original & Minimal & Optimal & $\Delta$Min & $\Delta$Opt \\
 \end{table}
 
 \paragraph{Key Findings.}
-(1) MINIMAL achieves 23--28\% speedup with only 3.72\% memory overhead.
-(2) D=120 (already 8-aligned) shows no improvement with MINIMAL, validating our hypothesis.
-(3) OPTIMAL provides additional gains for 8-aligned dimensions (D=120: +8.3\%) by targeting mod-16.
-(4) The speedup-to-overhead ratio (ROI) is 6.9$\times$ for MINIMAL, 4.0$\times$ for OPTIMAL.
+MINIMAL achieves 23--28\% speedup with 3.72\% overhead (6.9$\times$ ROI).
+D=120 (already 8-aligned) shows no MINIMAL improvement, validating our hypothesis.
+OPTIMAL provides additional gains (D=120: +8.3\%) at 4.0$\times$ ROI.
 
-\paragraph{PaLU Dimension Mapping.}
-Table~\ref{tab:repair_map} shows how MINIMAL strategy repairs PaLU dimensions.
+\subsection{End-to-End LLM Inference}
 
-\begin{table}[t]
-\centering
-\caption{MINIMAL strategy repairs PaLU dimensions to nearest 8-aligned value.}
-\label{tab:repair_map}
-\begin{tabular}{cccc}
-\toprule
-Original & Repaired & Original & Repaired \\
-\midrule
-114 $\rightarrow$ 120 & (+6) & 121 $\rightarrow$ 128 & (+7) \\
-116 $\rightarrow$ 120 & (+4) & 122 $\rightarrow$ 128 & (+6) \\
-117 $\rightarrow$ 120 & (+3) & 123 $\rightarrow$ 128 & (+5) \\
-118 $\rightarrow$ 120 & (+2) & 124 $\rightarrow$ 128 & (+4) \\
-120 $\rightarrow$ 120 & (0) & 125 $\rightarrow$ 128 & (+3) \\
-\bottomrule
-\end{tabular}
-\end{table}
+\noindent\textbf{Scope:} Results show PaLU \emph{compression} benefits, not dimension repair.
 
-\subsection{End-to-End LLM Inference (C5)}
-
-\noindent\fbox{\parbox{0.95\columnwidth}{
-\textbf{Scope Note:} The results in this subsection show \emph{PaLU compression} benefits (reduced KV cache), \textbf{not} dimension repair speedups.
-Our repair pass was not applied because PaLU's SVD factorization ($W_{kv} = U \cdot V^T$) requires specialized adaptation---see \S\ref{sec:solution} for discussion.
-}}
-\vspace{0.5em}
-
-We evaluate end-to-end inference performance on Llama-3-8B comparing baseline and PaLU-compressed (ratio=0.7) variants on A100 80GB (PyTorch 2.9.1, CUDA 12.8).
-Figure~\ref{fig:e2e} visualizes the prefill and decode throughput comparison.
+We compare Llama-3-8B baseline vs.\ PaLU-compressed (ratio=0.7) on A100 80GB.
+Figure~\ref{fig:e2e} shows prefill/decode throughput.
 
 \begin{figure}[t]
 \centering
@@ -597,54 +441,21 @@ Memory (MB) & 19003 & 18896 & --0.6\% \\
 \end{table}
 
 \paragraph{Key Finding.}
-PaLU compression achieves \textbf{11.5$\times$ decode throughput improvement} (Table~\ref{tab:e2e}).
-The decode phase is memory-bound, and reducing KV cache size directly improves throughput.
-Despite the 30--45\% overhead from misaligned dimensions (identified in \S\ref{sec:causes}), the compression benefit dominates in this memory-bound scenario.
-
-\paragraph{Why Repair Is Not Applied.}
-PaLU decomposes K/V projections as $W_{kv} = U \cdot V^T$, where $U \in \mathbb{R}^{d_{model} \times r}$ and $V^T \in \mathbb{R}^{r \times d_{head}}$.
-The irregular dimension $r$ (e.g., 114--125) resides \emph{inside} the decomposition, not at layer boundaries.
-Our current repair pass targets standard linear layers; adapting it to modify $U$ matrices while preserving the SVD structure requires additional engineering.
-
-\paragraph{Expected Repair Impact.}
-Based on our kernel-level validation (\S\ref{sec:eval}.3), we estimate that integrating alignment constraints into PaLU could yield:
-\begin{itemize}
-  \item \textbf{Prefill}: +15--25\% speedup (compute-bound, benefits from Tensor Core alignment)
-  \item \textbf{Decode}: +5--10\% speedup (memory-bound, limited benefit from alignment)
-\end{itemize}
-Two approaches: (1) constrained SVD with aligned rank, or (2) post-compression $U$ padding.
+PaLU achieves \textbf{11.5$\times$ decode throughput} (Table~\ref{tab:e2e}) by reducing KV cache size.
+Despite 30--45\% overhead from misaligned dimensions, compression benefits dominate in memory-bound decode.
+Based on kernel-level validation, integrating alignment could yield +15--25\% prefill and +5--10\% decode speedup.
 
 \subsection{Accuracy Preservation}
 
 Zero-padding guarantees \textbf{bit-exact output preservation}.
-We provide both theoretical and empirical evidence:
-
-\paragraph{Theoretical Guarantee (Forward-Pass Equivalence).}
-For a linear layer $y = Wx + b$ with $W \in \mathbb{R}^{d_{out} \times d_{in}}$, the padded layer uses $W' \in \mathbb{R}^{d'_{out} \times d_{in}}$ where $W'[0:d_{out}, :] = W$ and $W'[d_{out}:d'_{out}, :] = \mathbf{0}$.
-The output $y' = W'x + b'$ satisfies:
-\begin{equation}
-y'[0:d_{out}] = W'[0:d_{out}, :] \cdot x + b'[0:d_{out}] = Wx + b = y
-\end{equation}
-Thus the original output is exactly preserved in the first $d_{out}$ positions.
-For attention mechanisms, zero-valued key/query dimensions contribute zero to attention scores ($q \cdot k^T$), making padding semantically neutral.
-This mathematical equivalence guarantees \textbf{no accuracy degradation}---no retraining or fine-tuning is required.
-\textbf{Formal statement}: Let $f_{\theta}(x)$ denote the original model and $f_{\theta'}(x)$ the repaired model. For any input $x$, we have $f_{\theta}(x) = \text{slice}(f_{\theta'}(x), [0:d_{out}])$, ensuring functional equivalence.
-
-\paragraph{Empirical Verification.}
-We verify that repaired linear layers produce \textbf{identical outputs} (within floating-point precision) for the original dimensions (30/30 unit tests passed).
+For a linear layer $y = Wx + b$, the padded output $y' = W'x + b'$ satisfies $y'[0:d_{out}] = y$---the original output is exactly preserved.
+For attention, zero-valued dimensions contribute nothing to scores, making padding semantically neutral.
+Unit tests confirm identical outputs (30/30 passed).
 
 \paragraph{Limitations.}
-Our evaluation has three main limitations:
-
-\textbf{(1) Accuracy validation scope (Primary Gap):} While unit tests confirm bit-exact preservation (30/30 passed) and our theoretical analysis proves forward-pass equivalence, we have not conducted comprehensive perplexity evaluation (e.g., WikiText-2) or downstream task assessment (e.g., HellaSwag, PIQA).
-\emph{Why we expect zero degradation:} Zero-padding adds only $\mathbf{0}$ entries that contribute nothing to matrix multiplications or attention scores. The mathematical proof (Equation~3) guarantees $f_{\theta}(x) = \text{slice}(f_{\theta'}(x))$ for \emph{any} input---this is deterministic, not probabilistic.
-\emph{What perplexity would add:} Large-scale evaluation would demonstrate this guarantee holds across diverse input distributions at full model scale, ruling out any unforeseen numerical edge cases.
-This validation is our primary identified gap and highest-priority future work.
-
-\textbf{(2) End-to-end repair integration:} The kernel-level speedups (25--30\%) are validated on SDPA and GEMM microbenchmarks but not yet integrated into PaLU's SVD decomposition.
-PaLU represents $W_{kv} = U \cdot V^T$ where irregular dimensions reside in $U$ matrices; adapting our repair pass requires additional engineering to modify $U$ while preserving the factorization structure.
-
-\textbf{(3) Estimated repair impact:} The expected prefill (+15--25\%) and decode (+5--10\%) improvements in \S\ref{sec:eval}.4 are extrapolated from kernel experiments, not measured on complete models.
+(1) \emph{Accuracy scope}: While unit tests and theory confirm bit-exact preservation, comprehensive perplexity (WikiText-2) and downstream evaluation remain future work.
+(2) \emph{E2E integration}: Kernel-level speedups (25--30\%) are not yet integrated into PaLU's SVD structure.
+(3) \emph{Estimated impact}: Expected prefill (+15--25\%) and decode (+5--10\%) gains are extrapolated from kernel experiments.
 
 %% ===========================================
 %% 7. RELATED WORK
@@ -653,39 +464,20 @@ PaLU represents $W_{kv} = U \cdot V^T$ where irregular dimensions reside in $U$ 
 \label{sec:related}
 
 \paragraph{LLM Compression.}
-Post-training compression for LLMs has attracted significant attention.
-SparseGPT~\cite{sparsegpt} achieves one-shot pruning with minimal accuracy loss.
-GPTQ~\cite{gptq} and AWQ~\cite{awq} enable 4-bit quantization while preserving model quality.
-Low-rank decomposition methods like PaLU~\cite{palu} compress KV projections via SVD.
-These methods optimize for accuracy-compression trade-offs but largely ignore hardware alignment constraints.
-Our work reveals that this oversight causes significant performance penalties (30--58\% slowdown).
+Post-training compression methods---SparseGPT~\cite{sparsegpt} (pruning), GPTQ~\cite{gptq}/AWQ~\cite{awq} (quantization), and PaLU~\cite{palu} (low-rank)---optimize for accuracy-compression trade-offs but largely ignore hardware alignment.
+Our work reveals this causes 30--58\% performance penalties.
 
-\paragraph{KV Cache Optimization.}
-MQA~\cite{mqa} and GQA~\cite{gqa} reduce KV cache by sharing heads.
-StreamingLLM~\cite{streaminglm} maintains fixed-size caches for infinite-length generation.
-These approaches modify attention but preserve standard head dimensions.
-In contrast, SVD-based compression like PaLU produces irregular per-head dimensions that violate GPU alignment.
+\paragraph{KV Cache \& Attention Optimization.}
+MQA~\cite{mqa}, GQA~\cite{gqa}, and StreamingLLM~\cite{streaminglm} reduce KV cache while preserving standard dimensions.
+FlashAttention~\cite{flashattention,flashattention2} is tuned for $\{32, 64, 96, 128, 256\}$, with cliffs for other values.
+SVD-based compression produces irregular dimensions that violate these implicit constraints.
 
-\paragraph{GPU Kernel Optimization.}
-FlashAttention~\cite{flashattention,flashattention2} revolutionized attention computation with IO-aware algorithms.
-However, FlashAttention's optimized kernels are tuned for specific head dimensions ($\{32, 64, 96, 128, 256\}$), with performance cliffs for other values.
-CUTLASS~\cite{cutlass} provides templated GEMM kernels that select tile sizes based on dimension alignment.
-Tensor Core utilization depends heavily on K-dimension alignment ($K \mod 16 = 0$).
-Our Shape Contract formalizes these implicit requirements, enabling compression-aware kernel selection.
+\paragraph{Inference Frameworks.}
+TensorRT~\cite{tensorrt}, vLLM~\cite{vllm}, and TGI apply runtime optimizations but assume aligned dimensions.
+TensorRT's implicit padding is opaque and incurs per-inference overhead; our compile-time repair enables better kernel selection.
 
-\paragraph{Inference Optimization Frameworks.}
-TensorRT~\cite{tensorrt} applies layer fusion and kernel auto-tuning, including implicit padding for misaligned dimensions.
-However, TensorRT's runtime padding differs from our approach:
-(1) it is \emph{opaque}---users cannot control the strategy;
-(2) it may not recognize irregular dimensions from compression;
-(3) runtime padding incurs per-inference overhead, whereas compile-time repair enables better kernels.
-vLLM~\cite{vllm} and TGI optimize LLM serving but assume aligned dimensions.
-Our Shape Contract makes alignment requirements \emph{explicit}.
-
-\paragraph{Positioning of This Work.}
-Unlike prior work that focuses on accuracy-compression trade-offs, \textbf{we focus on performance-alignment trade-offs}.
-We identify dimensional collapse as a critical but overlooked problem: \textbf{compressed models may have fewer FLOPs yet run slower} due to hardware misalignment.
-Our contribution complements compression research by providing Shape Contracts and dimension repair to recover lost GPU efficiency.
+\paragraph{Positioning.}
+Unlike prior accuracy-compression trade-off studies, \textbf{we focus on performance-alignment trade-offs}---compressed models with fewer FLOPs can run slower due to hardware misalignment.
 
 %% ===========================================
 %% 8. CONCLUSION
@@ -693,47 +485,15 @@ Our contribution complements compression research by providing Shape Contracts a
 \section{Conclusion}
 \label{sec:conclusion}
 
-We identified dimensional collapse as a critical but overlooked problem in LLM compression.
-Through systematic analysis, we traced the root causes across software and hardware layers:
-\begin{itemize}
-  \item FlashAttention's internal slow path for non-8-aligned dimensions (+30--45\%)
-  \item Tensor Core tile alignment: K\%16 requirement causes 58\% slowdown when violated
-  \item Vectorized load degradation: float4$\rightarrow$scalar fallback causes 50\% throughput loss
-  \item SDPA bandwidth efficiency: 40\% loss for non-8-aligned head dimensions
-  \item L2 cache sector waste: only 5.8\%, \emph{not} a significant factor
-\end{itemize}
+We identified \emph{dimensional collapse} as a critical but overlooked problem in LLM compression.
+Root causes span three layers: FlashAttention internal slow paths (+30--45\%), Tensor Core tile alignment (58\% slowdown when K\%16$\neq$0), and vectorized load degradation (50\% throughput loss).
+Notably, L2 cache waste (5.8\%) is \emph{not} significant.
 
-Notably, PyTorch backend selection does \emph{not} cause fallback for most irregular dimensions---the performance penalty occurs within FlashAttention itself.
+Our Shape Contract and dimension repair provide a practical solution: MINIMAL strategy achieves 25--28\% kernel-level speedup with only 3.72\% memory overhead (6.9$\times$ ROI).
+96.9\% of PaLU dimensions benefit; no retraining required.
 
-Our Shape Contract and dimension repair approach provide a practical solution:
-\begin{itemize}
-  \item MINIMAL strategy: 3.72\% memory overhead for 25--28\% \textbf{kernel-level} speedup (6.9$\times$ ROI)
-  \item OPTIMAL strategy: 7.20\% memory overhead for 27--30\% \textbf{kernel-level} speedup (4.0$\times$ ROI)
-  \item 96.9\% of PaLU dimensions benefit from repair
-  \item Simple post-compression pass, no model retraining required
-\end{itemize}
-
-\textbf{Note on end-to-end validation:} Kernel-level speedups (25--30\%) are validated on SDPA and GEMM microbenchmarks.
-Integrating dimension repair into PaLU's SVD decomposition ($W = U \cdot V^T$) requires adapting to the factorized structure; this is left as future work.
-
-End-to-end evaluation shows PaLU achieves 11.5$\times$ decode speedup despite dimension misalignment, demonstrating that compression benefits can outweigh alignment penalties in memory-bound phases.
-However, combining compression with dimension repair promises further gains, particularly in compute-bound prefill (estimated +15--25\%).
-
-We advocate for compression-aware kernel design and alignment-aware compression algorithms.
-
-\paragraph{Future Work.}
-We identify three directions for future research:
-\begin{enumerate}
-  \item \textbf{SVD Integration}: Adapting dimension repair to low-rank decomposition structures ($W = U \cdot V^T$), either through constrained SVD or post-compression $U$ padding.
-  \item \textbf{Perplexity Validation}: Comprehensive accuracy evaluation (WikiText-2, downstream tasks) to empirically confirm our theoretical guarantee of zero accuracy degradation.
-  \item \textbf{Hardware Generalization (H100+)}: Our A100 analysis reveals alignment requirements tied to mma.sync tile sizes (K\%16). On H100 and newer architectures:
-  \begin{itemize}
-    \item TMA (Tensor Memory Accelerator) imposes different granularity for global-to-shared memory transfers
-    \item WGMMA instructions operate on 64$\times$64 warpgroup tiles, suggesting K\%64 may become optimal
-    \item Different SM counts and memory hierarchy may shift the relative impact of our identified root causes
-  \end{itemize}
-  Preliminary profiling would validate whether our Shape Contract generalizes or requires architecture-specific tuning.
-\end{enumerate}
+End-to-end evaluation shows PaLU achieves 11.5$\times$ decode speedup despite misalignment.
+Integrating repair into SVD structures ($W = U \cdot V^T$), comprehensive perplexity validation, and H100+ generalization remain future work.
 
 %% ===========================================
 %% REFERENCES

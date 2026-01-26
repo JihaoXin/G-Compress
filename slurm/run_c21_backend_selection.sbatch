@@ -9,6 +9,7 @@
 #SBATCH --error=slurm_logs/%j_C21_backend_selection.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 # =============================================================================
 # C2.1 Experiment: PyTorch Backend Selection Verification

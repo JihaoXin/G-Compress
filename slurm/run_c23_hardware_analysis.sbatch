@@ -9,6 +9,7 @@
 #SBATCH --error=slurm_logs/%j_C23_hardware_analysis.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jihao.xin@kaust.edu.sa
+#SBATCH --qos=spot
 
 # =============================================================================
 # C2.3 Experiment: Hardware Layer Analysis

@@ -1,343 +1,234 @@
-created_at: '2026-01-26T11:00:00+08:00'
+created_at: '2026-01-26T14:45:00+08:00'
 execution_order:
-  phase_1_experiments:
-    description: 优先运行实验（可并行）
+  phase_1_parallel_experiments:
+    description: 并行运行独立实验（M1.step1 和 M2.step1）
     parallel: true
     tasks:
-    - 'M2 step 1: accuracy validation (独立，可立即开始)'
-    - 'M3 step 1: benchmark consistency (独立，可立即开始)'
-  phase_2_m1_investigation:
-    description: M1 需要代码修复，复杂度高
-    note: 如果 phase_2 失败，降级为 future work
+    - 'M1 step 1: 评估 E2E 修复可行性'
+    - 'M2 step 1: 重新运行 benchmark 确保一致性'
+  phase_2_m1_decision:
+    description: 根据 M1 评估结果决定走 A 还是 B 路径
     parallel: false
     tasks:
-    - 'M1 step 1: 修复 analyze_palu_dimensions()'
-    - 'M1 step 2: 修复 DimensionRepairer'
-    - 'M1 step 3: 重新运行 C5'
+    - 'M1 step 2: 执行修复 或 降级方案'
   phase_3_writing:
-    description: 所有实验完成后进行写作
-    parallel: false
+    description: 所有实验完成后统一写作
+    parallel: true
     tasks:
-    - 'm1: 作者名字'
-    - 'M3 step 2: 更新表格'
-    - 'm4: 置信区间'
-    - 'm5: Table 9'
-    - 'm6: 公式编号'
-    - 'm7: FA 版本'
-    - 'm3: Figure 1'
-    - 'm8: Figure 6'
-    - 'm2: Algorithm 1'
+    - 'M2 step 2: 更新 Table 3 和 Table 5'
+    - 'M3: 为 Figure 5 添加维度标签'
+    - 'm1: 精简 abstract'
+    - 'm2: 统一符号'
+    - 'm3: FA 版本说明'
+    - 'm4: Table 1 FAIL 格式'
+    - 'm5: Figure 1 caption'
+    - 'm6: Related Work positioning'
 issues:
 - actions:
   - agent: experimenter
-    expected_output: 修复后的 analyze_palu_dimensions() 能检测到 ~97% misalignment
+    expected_output: 可行性报告 + 修复代码（如果可行）
     status: pending
     step: 1
-    task: '修复 analyze_palu_dimensions() 函数，使其正确检测 PaLU 模型的 per-head 维度：
-
-      1. 检查 src/gcompress_bench/dimension_repair.py 中的 analyze_palu_dimensions()
-
-      2. PaLU 模型的 k_proj/v_proj 使用 SVD 分解 (U @ VT)，需要找到内部 rank 维度
-
-      3. 查看 third_party/palu 中的模型结构，找到存储 per-head rank 的位置
-
-      4. 修复函数返回正确的维度分布（应该是 114-125 范围，而非 320-1024）
-
-      '
+    task: "评估修复 E2E 验证的可行性：\n1. 阅读 src/gcompress_bench/dimension_repair.py 中的 analyze_palu_dimensions()\n\
+      2. 检查 third_party/palu 模型结构，找到 per-head rank 维度存储位置\n3. 评估修复难度（简单/中等/困难）\n\n\
+      如果难度 <= 中等：\n  - 修复 analyze_palu_dimensions()\n  - 确保检测到 ~97% misalignment\n\
+      \n如果难度 = 困难：\n  - 报告具体困难点\n  - 建议降级到\"文字修改方案\"\n"
   - agent: experimenter
     depends_on:
     - 1
-    expected_output: DimensionRepairer 能正确处理 PaLU 模型
+    expected_output: E2E 实验结果 或 降级方案说明
     status: pending
     step: 2
-    task: '修复 DimensionRepairer 对 PaLU 模型的支持：
+    task: '根据 step 1 结果执行：
 
-      1. PaLU 的低秩分解不是标准 Linear 层，需要修复 repair_linear_layer()
 
-      2. 对于 SVD 分解 W = U @ VT，padding 应该在 VT 的 K 维度
+      方案 A（代码修复成功）:
 
-      3. 确保 inplace=True 时不会创建额外副本（避免 81% 内存开销）
+      1. 修复 DimensionRepairer 对 PaLU SVD 分解的支持
 
-      '
-  - agent: experimenter
-    depends_on:
-    - 2
-    expected_output: palu_repair 相比 palu 有 10-20% 的端到端加速
-    status: pending
-    step: 3
-    task: '重新运行 C5 端到端验证实验：
+      2. 确保 inplace=True 避免内存翻倍
 
-      sbatch 提交任务，比较 baseline / palu / palu_repair 三种模型的：
+      3. 重新运行 C5 实验
 
-      - Prefill latency (token/s)
+      4. 验证 palu_repair vs palu 有 10-20% 加速
 
-      - Decode latency (token/s)
 
-      - Memory usage (MB)
+      方案 B（代码修复困难）:
 
-      验证 dimension repair 在端到端场景下的加速效果
+      1. 跳过此步骤
+
+      2. 在论文中明确声明 E2E 集成是 future work
+
+      3. 修改 §6.4 标题为 "PaLU Compression Baseline"
 
       '
   depends_on: []
-  description: 'Dimension repair 只在 kernel 层验证，没有与 PaLU 模型端到端集成。
+  description: '§6.4 展示的 11.5x decode 加速来自 PaLU 压缩本身，而非 dimension repair。
 
-    C5 实验失败原因：analyze_palu_dimensions() 错误地检测 group-level 维度而非 per-head 维度。
+    C5 实验因 analyze_palu_dimensions() bug 导致 repair 没有生效。
 
-    需要修复代码并重新验证。
+    审稿者建议两个选项：(1) 删除§6.4, (2) 重命名为 baseline context。
+
+    '
+  failure_reason: 超过最大迭代次数 3
+  fallback_plan: '如果修复困难：
+
+    1. 在 abstract 中明确说明 E2E 是 future work
+
+    2. 将 §6.4 重命名为 "PaLU Compression Baseline (Context)"
+
+    3. 添加 scope note 解释 kernel-level vs E2E
 
     '
   id: M1
-  inner_loop_count: 0
+  inner_loop_count: 3
   max_inner_loops: 3
-  note: '如果修复困难，可降级方案：在论文中明确声明 repair 只在 kernel 层验证，
-
-    PaLU 集成需要专门的 SVD-aware padding（作为 future work）
-
-    '
   priority: high
-  status: in_progress
-  title: End-to-End Validation Gap
+  status: failed
+  title: E2E Validation Gap
   type: EXPERIMENT_REQUIRED
 - actions:
   - agent: experimenter
-    expected_output: '验证结果证明：
-
-      1. Zero-padding 在 float16 精度范围内不影响输出
-
-      2. MSE < 1e-6 或 perplexity 差异 < 0.1%
-
-      '
+    expected_output: 一致的 benchmark 数据，包含 mean ± std
     status: pending
     step: 1
-    task: '运行 perplexity 验证实验，比较 original 和 repaired 模型：
+    task: "重新运行 SDPA benchmark 确保一致性：\n\n1. 使用相同配置重新测量 D=107,112,120,128\n2. 增加 trials\
+      \ 到 200 次（与论文声称一致）\n3. 计算 mean ± std\n4. 保存到 results/M2_benchmark_consistency/\n\
+      \n命令：\npython -m scripts.run_benchmarks --experiment sdpa_backend \\\n  --head_dims\
+      \ 107,112,120,128 \\\n  --trials 200 \\\n  --out results/M2_benchmark_consistency\n\
+      \n需要通过 Slurm 提交：\nsbatch --constraint=gpu_a100 --gres=gpu:a100:1 ...\n"
+  - agent: writer
+    depends_on:
+    - 1
+    expected_output: 更新后的 Table 3 和 Table 5
+    status: pending
+    step: 2
+    task: '更新论文中的 Table 3 和 Table 5：
 
+      1. 使用 step 1 的统一数据更新 baseline latencies
 
-      方案 A（简化版 - 推荐）：
+      2. 添加 ± std 列显示测量误差
 
-      使用独立的 Linear 层验证 padding 不影响输出：
+      3. 在 caption 中说明 "Mean ± std over 200 trials"
 
-      1. 创建测试脚本 scripts/test_repair_accuracy.py
-
-      2. 对于 D=107,114,117,121,125 等维度的 Linear 层
-
-      3. 计算 repaired_output vs original_output 的 MSE
-
-      4. 验证 MSE < 1e-6（float16 精度范围内）
-
-
-      方案 B（完整版 - 如果时间允许）：
-
-      使用 llm_eval.py 测试完整模型 perplexity：
-
-      python -m src.gcompress_bench.llm_eval --variant baseline --suite ppl --out
-      results/accuracy
-
-      python -m src.gcompress_bench.llm_eval --variant palu --suite ppl --out results/accuracy
-
-      # 注意：palu_repair 需要先修复 M1 的问题
-
-
-      先执行方案 A，如果成功再考虑方案 B
+      4. 确保两表中相同维度使用相同 baseline 数据
 
       '
   depends_on: []
-  description: '论文声称 "bit-exact output preservation" 但没有 perplexity 或 downstream 任务评估。
+  description: 'D=107 baseline latency 在 Table 3 是 2.192ms，在 Table 5 是 2.064ms，差 6%。
 
-    需要添加 WikiText-2 perplexity 实验验证 repaired 模型的精度。
+    审稿者认为 6% variance 对 CUDA event timing with 200 measurements 来说太高。
 
     '
   id: M2
   inner_loop_count: 0
   max_inner_loops: 2
-  note: 这是最关键的验证，即使 M1 无法完成，M2 也必须完成
   priority: high
-  status: pending
-  title: Missing Accuracy Validation
+  status: in_progress
+  title: Table 3 vs Table 5 Inconsistency
   type: EXPERIMENT_REQUIRED
 - actions:
-  - agent: experimenter
-    expected_output: 统一的 benchmark 数据，包含 mean ± std
+  - agent: writer
+    expected_output: 带维度标签的 Figure 5
     status: pending
     step: 1
-    task: "重新运行 SDPA benchmark，确保一致的测量方法：\n1. 使用 scripts/run_benchmarks.py 重新测量 D=107,112,120,128\n\
-      2. 增加 trials 到 100 次\n3. 计算 mean ± std\n4. 将结果保存到 results/benchmark_consistency/\n\
-      \n命令示例：\npython -m scripts.run_benchmarks --experiment sdpa_backend \\\n  --head_dims\
-      \ 107,112,120,128 --trials 100 --out results/benchmark_consistency\n"
-  - agent: writer
-    depends_on:
-    - 1
-    expected_output: 更新后的表格包含置信区间
-    status: pending
-    step: 2
-    task: '更新论文中的 Table 5 和 Table 8：
+    task: '为 Figure 5 添加维度标签：
 
-      1. 使用一致的 baseline 数据
 
-      2. 添加 ± std 列
+      方案 A（推荐）：
 
-      3. 在 caption 中说明 trials 数量
+      1. 在散点图中为关键点添加文本标签（107, 114, 117, 120, 121, 125）
+
+      2. 使用 matplotlib annotate() 或手动标注
+
+
+      方案 B（替代）：
+
+      1. 将散点图改为表格格式
+
+      2. 列：Dimension | Speedup (%) | Overhead (%) | ROI
+
+
+      选择方案 A，因为可视化效果更好。
+
+      修改 scripts/plot_results.py 中生成 Figure 5 的代码。
 
       '
   depends_on: []
-  description: 'Table 5 显示 D=107 baseline 为 2.192ms，Table 8 显示 2.064ms，差异 6%。
+  description: 'Figure 5 (Repair Tradeoff) 散点图显示了各维度的 speedup vs overhead，
 
-    需要统一基准测量，并添加置信区间。
+    但没有标注每个点对应哪个维度。审稿者无法判断具体维度的 tradeoff。
 
     '
   id: M3
   inner_loop_count: 0
-  max_inner_loops: 2
-  priority: medium
-  status: pending
-  title: Inconsistent Latency Numbers
-  type: EXPERIMENT_REQUIRED
-- actions:
-  - agent: writer
-    expected_output: 修正后的作者名字
-    status: pending
-    step: 1
-    task: '检查并修正作者名字：
-
-      1. 确认正确的名字拼写（Tian Lv 或其他）
-
-      2. 在 Latex/main.tex 中修正
-
-      '
-  depends_on: []
-  description: 作者名字 'Tian Lvy' 可能是 typo，需要确认并修正
-  id: m1
-  inner_loop_count: 0
   max_inner_loops: 1
   priority: high
   status: pending
-  title: Author Name Typo
+  title: Missing Per-Dimension Labels in Figure 5
   type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: 删除或改进后的算法
+    expected_output: 精简后的 abstract
     status: pending
     step: 1
-    task: '选择以下方案之一：
+    task: '精简 abstract 至 200 词以下：
 
-      A) 删除 Algorithm 1，节省空间
+      1. 删减或合并 "Scope of validation" 段落
 
-      B) 扩展为完整的 repair_model 流程，包括层选择逻辑
+      2. 保留核心贡献声明
 
-      推荐方案 A，因为 6 页限制
+      3. 使用更紧凑的表达
 
       '
   depends_on: []
-  description: Algorithm 1 的伪代码过于简单，考虑删除或增强
+  description: Abstract 略长，可以删减 'Scope of validation' 部分
+  id: m1
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: low
+  status: pending
+  title: Abstract Length
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: 符号统一的论文
+    status: pending
+    step: 1
+    task: '统一符号使用：
+
+      1. 公式中使用 d（保持不变，数学规范）
+
+      2. 图表标签改用 d=107 而非 D=107
+
+      3. 文字中使用 "head dimension d=107" 或 "d=107"
+
+      4. 在 §2 Notation 段落中明确定义
+
+      '
+  depends_on: []
+  description: '论文混用三种符号：d（公式中）、D=107（图表中）、head_dim=107（文字中）
+
+    '
   id: m2
   inner_loop_count: 0
   max_inner_loops: 1
-  priority: low
-  status: pending
-  title: Redundant Algorithm Pseudocode
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 可读性更好的 Figure 1
-    status: pending
-    step: 1
-    task: '改进 Figure 1：
-
-      1. 使用 \begin{figure*} 扩展为双栏
-
-      2. 增大子图尺寸
-
-      3. 或简化为核心信息，删除次要 panel
-
-      '
-  depends_on: []
-  description: Figure 1 部分 panel 太小，文字难以阅读
-  id: m3
-  inner_loop_count: 0
-  max_inner_loops: 1
   priority: medium
   status: pending
-  title: Figure 1 Readability
-  type: WRITING_ONLY
-- actions:
-  - agent: experimenter
-    expected_output: 包含统计数据的 benchmark 结果
-    status: pending
-    step: 1
-    task: '为现有 benchmark 数据添加统计信息：
-
-      1. 检查 results/ 目录中的 raw.json 是否包含多次测量
-
-      2. 如果有，计算 mean ± std
-
-      3. 如果没有，与 M3 一起重新测量
-
-      '
-  depends_on:
-  - M3
-  description: 所有 benchmark 表格缺少 error bars 或置信区间
-  id: m4
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: medium
-  status: pending
-  title: Missing Confidence Intervals
-  type: EXPERIMENT_REQUIRED
-- actions:
-  - agent: writer
-    expected_output: 重新格式化的 Table 9
-    status: pending
-    step: 1
-    task: '重新格式化 Table 9：
-
-      格式：Original → Repaired | Δ
-
-      每个维度一行，清晰显示修复映射
-
-      '
-  depends_on: []
-  description: Table 9 格式混乱，'(+6)' 条目分散
-  id: m5
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: low
-  status: pending
-  title: Table 9 Formatting
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 编号一致的公式
-    status: pending
-    step: 1
-    task: '为所有关键公式添加编号：
-
-      1. Shape Contract 优化目标
-
-      2. Forward-pass 等价性证明
-
-      3. 其他在文中被引用的公式
-
-      '
-  depends_on: []
-  description: 只有 Equation 3 有编号，其他重要公式未编号
-  id: m6
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: low
-  status: pending
-  title: Equation Numbering
+  title: Notation Inconsistency (d vs D vs head_dim)
   type: WRITING_ONLY
 - actions:
   - agent: researcher
-    expected_output: 关于 FA 版本行为的说明
+    expected_output: 版本敏感性分析
     status: pending
     step: 1
     task: '研究 FlashAttention 版本行为：
 
-      1. 检查 FlashAttention 2.x 和 3.x 的 release notes
+      1. 检查 FA 2.x vs 3.x 的 alignment 处理差异
 
-      2. 确认 slow-path 行为是版本特异还是架构性的
+      2. 查看 release notes 中关于 head_dim 支持的说明
 
-      3. 提供一句话总结添加到论文
+      3. 总结一句话添加到论文
 
       '
   - agent: writer
@@ -346,126 +237,187 @@ issues:
     expected_output: 更新后的论文
     status: pending
     step: 2
-    task: 将 FA 版本说明添加到 §2.2 或 §4.2
+    task: '在 §2.2 或 §4.1 添加：
+
+      "Our findings are based on FlashAttention 2.7.4;
+
+      FA3 uses a different tiling strategy that may exhibit different behavior."
+
+      '
   depends_on: []
-  description: 论文使用 FlashAttention 2.7.4 但未讨论版本特异性
-  id: m7
+  description: '论文使用 FlashAttention 2.7.4，但未讨论版本敏感性（是否适用于 FA3, xFormers）
+
+    '
+  id: m3
   inner_loop_count: 0
   max_inner_loops: 1
   priority: medium
   status: pending
-  title: FlashAttention Version Analysis
+  title: FlashAttention Version Specificity
   type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: 改进后的 Figure 6 或移至 appendix
+    expected_output: 格式改进的 Table 1
     status: pending
     step: 1
-    task: '修改 Figure 6：
+    task: '修复 Table 1 格式：
 
-      方案 A：添加虚线边框和说明，注明这是 compression 收益而非 repair 收益
+      1. 将 ''FAIL'' 改为 ''---'' 或 ''N/A''
 
-      方案 B：移至 appendix
+      2. 确保右对齐
 
-      方案 C：如果 M1 完成，添加 repair 对比数据
+      3. 可选：添加脚注解释 ''---'' 表示 backend unavailable
 
       '
   depends_on: []
-  description: Figure 6 显示的是 PaLU 压缩收益而非 repair 收益，可能造成混淆
-  id: m8
+  description: Table 1 中 MEM_EFF D=107 的 'FAIL' 破坏了数值对齐
+  id: m4
   inner_loop_count: 0
   max_inner_loops: 1
   priority: low
   status: pending
-  title: Figure 6 Visual Distinction
+  title: Table 1 FAIL Alignment
   type: WRITING_ONLY
-planner_summary: '本次 review 主要问题是实验验证不足：
+- actions:
+  - agent: writer
+    expected_output: 完整的 Figure 1 caption
+    status: pending
+    step: 1
+    task: '更新 Figure 1 caption：
 
-  1. M1: Dimension repair 没有端到端验证（当前 C5 实验有 bug）
+      1. 描述左侧流程图：compression → misaligned dims → slowdown
 
-  2. M2: 缺少 perplexity 评估证明 accuracy preservation
+      2. 描述右侧图表：SDPA latency bars for different head_dim values
 
-  3. M3: benchmark 数据不一致，缺少置信区间
+      3. 保持 caption 简洁（2-3 句）
+
+      '
+  depends_on: []
+  description: Figure 1 caption 没有解释右侧的 'SDPA Latency v. d Eff' subplot
+  id: m5
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: medium
+  status: pending
+  title: Figure 1 Caption Completeness
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: 改进的 Introduction positioning
+    status: pending
+    step: 1
+    task: "考虑以下选项（任选其一）：\nA) 保持现状（符合 systems paper 惯例）\nB) 在 §1 添加 1-2 句 positioning：\n\
+      \   \"Unlike prior work that optimizes for FLOP reduction, we focus on...\"\n\
+      推荐方案 B，添加简短 positioning。\n"
+  depends_on: []
+  description: Related Work (§7) 位置较晚，可考虑将关键定位移到 §1
+  id: m6
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: low
+  status: pending
+  title: Related Work Positioning
+  type: WRITING_ONLY
+planner_summary: '本次 review 评分 7.1/10 (Weak Accept)，主要问题：
+
+  1. M1 (E2E Validation Gap): §6.4 展示的是 PaLU 压缩收益而非 dimension repair 收益，C5 实验有 bug
+
+  2. M2 (Table Inconsistency): D=107 在 Table 3 (2.192ms) vs Table 5 (2.064ms) 差 6%
+
+  3. M3 (Figure 5 Labels): 散点图缺少具体维度标签
 
 
-  策略：优先处理 M2（perplexity 实验），因为 M1 需要修复复杂的 PaLU 集成代码。
+  策略：
 
-  M3 可以通过重新运行 benchmark 并添加统计数据解决。
+  - M1: 复杂度高，需要修复代码。提供两个选项：(1)修复代码重跑E2E, (2)重新定义§6.4为baseline context
+
+  - M2: 需要重新运行 benchmark 确保一致性，添加 mean±std
+
+  - M3: 纯图表修改，可以快速完成
+
+  - 多个 Minor Issues 都是 WRITING_ONLY，在实验完成后统一处理
 
   '
-review_iteration: 1
-review_score: 7.4
+review_iteration: 2
+review_score: 7.1
 success_criteria:
   expected_score_improvement:
-    current: 7.4
-    with_M1_complete: 8.2
-    with_M2_M3: 7.8
-    with_all_minor: 8.5
+    current: 7.1
+    with_M1_resolved: 8.0
+    with_M2_M3_fixed: 7.5
+    with_all_minor: 8.2
   must_complete:
-  - 'M2: accuracy validation (任何方案)'
-  - 'M3: benchmark consistency'
-  - 'm1: author name fix'
-  - 'm4: confidence intervals'
+  - 'M2: 修复 Table 3/5 不一致，添加 mean±std'
+  - 'M3: 为 Figure 5 添加维度标签'
+  - 'm4: Table 1 FAIL → ''---'''
+  - 'm5: Figure 1 caption 补全'
   nice_to_have:
-  - 'm2: Algorithm 1'
-  - 'm6: equation numbering'
-  - 'm8: Figure 6'
+  - 'm1: abstract 精简'
+  - 'm6: Related Work positioning'
   should_complete:
-  - 'M1: E2E validation (或明确降级)'
-  - 'm3: Figure 1'
-  - 'm5: Table 9'
-  - 'm7: FA version'
+  - 'M1: E2E 验证（修复代码 或 明确降级）'
+  - 'm2: 符号统一'
+  - 'm3: FA 版本说明'
 target_score: 8.0
 writing_tasks:
 - changes_required:
-  - change: 更新 Table 5 和 Table 8 的数据
-    section: §6 (Evaluation)
-  - change: 添加 trials 数量说明
+  - change: 更新 D=107 baseline 数据，添加 ±std
+    section: Table 3 (§6.2)
+  - change: 使用与 Table 3 一致的 baseline，添加 ±std
+    section: Table 5 (§6.4)
+  - change: 添加 'Mean ± std over 200 trials'
     section: Table captions
-  description: 更新 Tables 5 和 8 使用一致的 baseline 数据和置信区间
-  id: M3
+  description: 更新 Table 3 和 Table 5 使用一致数据
+  id: M2
   target_files:
   - Latex/main.tex
 - changes_required:
-  - change: 修正 'Tian Lvy'
-    section: Author list
-  description: 修正作者名字 typo
+  - change: 为散点添加 '107', '114', '117', '120', '121', '125' 文本标签
+    section: Figure 5
+  description: 为 Figure 5 添加维度标签
+  id: M3
+  target_files:
+  - Latex/figures/fig5_repair_tradeoff.pdf
+  - scripts/plot_results.py
+- changes_required:
+  - change: 删减或合并 'Scope of validation' 内容，控制在 200 词
+    section: Abstract
+  description: 精简 abstract
   id: m1
   target_files:
   - Latex/main.tex
 - changes_required:
-  - change: 扩展为双栏或简化
-    section: Figure 1
-  description: 改进 Figure 1 可读性
+  - change: 图表标签改用 d=107；文字中用 'head dimension d=107'
+    section: Throughout
+  description: 统一符号 d/D/head_dim
+  id: m2
+  target_files:
+  - Latex/main.tex
+- changes_required:
+  - change: 添加一句关于 FA 2.7.4 版本特异性的说明
+    section: §2.2 or §4.1
+  description: 添加 FlashAttention 版本说明
   id: m3
   target_files:
   - Latex/main.tex
-  - Latex/figures/
 - changes_required:
-  - change: 改为 Original → Repaired | Δ 格式
-    section: Table 9
-  description: 重新格式化 Table 9
+  - change: '''FAIL'' → ''---'' 并确保右对齐'
+    section: Table 1
+  description: 修复 Table 1 FAIL 格式
+  id: m4
+  target_files:
+  - Latex/main.tex
+- changes_required:
+  - change: 添加对右侧 subplot 的描述
+    section: Figure 1 caption
+  description: 补全 Figure 1 caption
   id: m5
   target_files:
   - Latex/main.tex
 - changes_required:
-  - change: 为 Shape Contract 公式添加编号
-    section: §5 (Shape-Aware Compression)
-  description: 为关键公式添加编号
+  - change: 添加 1-2 句与 prior work 的 positioning
+    section: §1 Introduction
+  description: 改进 Introduction positioning
   id: m6
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 添加一句关于版本特异性的说明
-    section: §2.2 or §4.2
-  description: 添加 FlashAttention 版本说明
-  id: m7
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 添加注释或移至 appendix
-    section: Figure 6
-  description: 修改 Figure 6 或移至 appendix
-  id: m8
   target_files:
   - Latex/main.tex

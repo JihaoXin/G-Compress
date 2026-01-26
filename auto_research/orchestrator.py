@@ -38,9 +38,13 @@ from pathlib import Path
 from typing import Optional
 import re
 
-# 项目根目录
+# 项目根目录（必须在导入自定义模块之前设置）
 PROJECT_DIR = Path(__file__).parent.parent.absolute()
+sys.path.insert(0, str(PROJECT_DIR))
 os.chdir(PROJECT_DIR)
+
+# 极简版 Memory（不再使用 Event System）
+from auto_research.memory import get_memory, SimpleMemory
 
 # 配置
 STATE_FILE = PROJECT_DIR / "auto_research" / "state" / "research_state.yaml"
@@ -87,6 +91,10 @@ class Orchestrator:
 
         # Rate limit 状态（防止重复通知）
         self._rate_limit_notified = False
+
+        # 极简版 Memory（不再使用 EventQueue）
+        self.memory = get_memory()
+        self._last_score = 0.0  # 追踪评分变化
 
     def save_checkpoint(self):
         """保存运行状态检查点"""
@@ -370,6 +378,9 @@ class Orchestrator:
 
         base_prompt = prompt_file.read_text()
 
+        # 获取历史上下文（Memory System）
+        history_context = self.memory.get_context_for_agent(agent_type)
+
         full_prompt = f"""{base_prompt}
 
 ---
@@ -377,6 +388,10 @@ class Orchestrator:
 ## 当前任务
 
 {task}
+
+## 迭代历史（Memory）
+
+{history_context if history_context else "这是第一次迭代，无历史记录。"}
 
 ## 上下文文件
 
@@ -510,27 +525,56 @@ class Orchestrator:
             self.send_notification("Agent 错误", f"Agent {agent_type} 发生错误: {e}", priority="critical")
             return ""
 
-    def wait_for_slurm(self, max_wait_hours: float = 4) -> bool:
-        """等待所有 Slurm 作业完成"""
-        self.log("Checking Slurm jobs...")
+    # ========== 智能调度：记忆系统 ==========
+
+    def record_score_to_memory(self, score: float):
+        """记录分数到 Memory（极简版）"""
+        self.memory.record_score(score)
+        self._last_score = score
+        self.log(f"Memory: 记录评分 {score}/10", "MEMORY")
+
+    def get_memory_context(self) -> str:
+        """获取 Memory 上下文（包含 Goal Anchor、停滞警告、分数趋势）"""
+        return self.memory.get_context()
+
+    def wait_for_slurm(self, max_wait_hours: float = 4, job_prefix: str = "GAC_") -> bool:
+        """等待 AutoGAC 提交的 Slurm 作业完成
+
+        只等待作业名称以 job_prefix 开头的作业（默认 "GAC_"），
+        忽略其他项目的作业。
+
+        Args:
+            max_wait_hours: 最大等待时间（小时）
+            job_prefix: 作业名称前缀，只等待匹配的作业
+        """
+        self.log(f"Checking Slurm jobs (prefix: {job_prefix})...")
         max_wait = timedelta(hours=max_wait_hours)
         start_time = datetime.now()
 
         while datetime.now() - start_time < max_wait:
             try:
+                # 使用 -o 格式获取作业名称: "%j" = job name
                 result = subprocess.run(
-                    ["squeue", "-u", os.environ.get("USER", "xinj"), "-h"],
+                    ["squeue", "-u", os.environ.get("USER", "xinj"), "-h", "-o", "%j"],
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
-                running_jobs = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
 
-                if running_jobs == 0:
-                    self.log("All Slurm jobs completed")
+                if not result.stdout.strip():
+                    self.log("No Slurm jobs found")
                     return True
 
-                self.log(f"{running_jobs} jobs still running, waiting 60s...")
+                # 只统计匹配前缀的作业
+                all_jobs = result.stdout.strip().split("\n")
+                gac_jobs = [j for j in all_jobs if j.startswith(job_prefix)]
+                running_jobs = len(gac_jobs)
+
+                if running_jobs == 0:
+                    self.log(f"All {job_prefix}* jobs completed (other jobs: {len(all_jobs)})")
+                    return True
+
+                self.log(f"{running_jobs} {job_prefix}* jobs running, waiting 60s...")
                 time.sleep(60)
 
             except Exception as e:
@@ -755,6 +799,8 @@ AutoGAC Status:
 
             if result.returncode == 0:
                 self.log("Figure generation completed successfully", "INFO")
+                # 生成后进行质量预检
+                self._precheck_figure_quality()
                 return True
             else:
                 self.log(f"Figure generation warning: {result.stderr[:500]}", "WARN")
@@ -762,6 +808,53 @@ AutoGAC Status:
         except Exception as e:
             self.log(f"Figure generation error: {e}", "ERROR")
             return False
+
+    def _precheck_figure_quality(self):
+        """图表质量预检 - 在 Reviewer 之前主动发现问题
+
+        检查项：
+        1. 图表比例是否过于扁平
+        2. 分辨率是否足够
+        3. PDF 版本是否存在
+        """
+        self.log(">>> 图表质量预检...", "PRECHECK")
+        try:
+            from PIL import Image
+
+            issues = []
+            for fig_path in sorted(FIGURES_DIR.glob("fig*.png")):
+                img = Image.open(fig_path)
+                width, height = img.size
+                aspect_ratio = height / width
+
+                # 检查 1: 比例是否过于扁平 (高度应 >= 宽度 * 0.35)
+                if aspect_ratio < 0.35:
+                    issues.append(f"  ⚠️ {fig_path.name}: 比例过扁 ({aspect_ratio:.2f})，建议高度 ≥ 宽度×0.4")
+
+                # 检查 2: 分辨率是否足够
+                if width < 600:
+                    issues.append(f"  ⚠️ {fig_path.name}: 宽度过小 ({width}px)，建议 ≥ 800px")
+
+                img.close()
+
+            # 检查 PDF 版本是否存在
+            for png_path in FIGURES_DIR.glob("fig*.png"):
+                pdf_path = png_path.with_suffix('.pdf')
+                if not pdf_path.exists():
+                    issues.append(f"  ⚠️ {png_path.stem}: 缺少 PDF 版本")
+
+            if issues:
+                self.log("发现图表质量问题:", "PRECHECK")
+                for issue in issues:
+                    self.log(issue, "PRECHECK")
+                self.log("建议修改 scripts/create_paper_figures.py 并重新生成", "PRECHECK")
+            else:
+                self.log("图表质量检查通过 ✓", "PRECHECK")
+
+        except ImportError:
+            self.log("Pillow 未安装，跳过图表预检", "WARN")
+        except Exception as e:
+            self.log(f"图表预检错误: {e}", "WARN")
 
     def pdf_to_images(self) -> list:
         """将 PDF 转换为图像用于视觉审核"""
@@ -1333,6 +1426,9 @@ Issue: {issue.get('id')} - {issue.get('title')}
         self.log(f"  状态: {'继续改进' if score < PAPER_ACCEPT_THRESHOLD else '已达标'}", "INFO")
         self.log(f"{'='*40}\n", "INFO")
 
+        # 8.5 记录到 Memory 系统（极简版：只记录分数）
+        self.record_score_to_memory(score)
+
         # 9. 清理工作区
         self.cleanup_workspace()
 
@@ -1341,6 +1437,21 @@ Issue: {issue.get('id')} - {issue.get('title')}
 
         # 保存检查点
         self.save_checkpoint()
+
+        # 11. 停滞检测
+        is_stagnating, stagnation_reason = self.memory.is_stagnating()
+        if is_stagnating:
+            self.log(f"⚠️ 停滞检测: {stagnation_reason}", "WARN")
+            self.log("建议：换一种完全不同的方法，或补充实验数据", "WARN")
+
+            # 如果停滞严重（连续 10 次无进步），发送通知
+            if self.memory.stagnation_count >= 10:
+                self.send_notification(
+                    "AutoGAC 停滞警告",
+                    f"连续 {self.memory.stagnation_count} 次迭代无有效进步。\n"
+                    f"当前评分: {score}/10 | 最高分: {self.memory.best_score}/10\n"
+                    f"建议人工介入检查。"
+                )
 
         return True
 
