@@ -291,7 +291,7 @@ class Orchestrator:
         # 通用：提取文件修改
         files_written = re.findall(r"(?:写入|保存|创建|Write|Save).*?([a-zA-Z0-9_/]+\.\w+)", output, re.IGNORECASE)
         if files_written:
-            summary_lines.append(f"写入文件: {', '.join(set(files_written)[:5])}")
+            summary_lines.append(f"写入文件: {', '.join(list(set(files_written))[:5])}")
 
         return "\n".join(summary_lines) if summary_lines else "无明显变更"
 

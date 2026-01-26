@@ -20,6 +20,10 @@ authors:
     affiliation: "HUMAIN AI"
     city: "Riyadh"
     country: "Saudi Arabia"
+  - name: "Marco Canini"
+    affiliation: "KAUST"
+    city: "Thuwal"
+    country: "Saudi Arabia"
 
 # 论文格式
 format:

@@ -36,6 +36,9 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题（"维�
 
 \author{Kesen Wang}
 \affiliation{\institution{HUMAIN AI}\city{Riyadh}\country{Saudi Arabia}}
+
+\author{Marco Canini}
+\affiliation{\institution{KAUST}\city{Thuwal}\country{Saudi Arabia}}
 ```
 
 ### 图表方案（6 图，参考 paper_example 标准）

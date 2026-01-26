@@ -89,16 +89,43 @@ def load_palu_model_variant(device: str, dtype: torch.dtype):
 
 
 def analyze_palu_dimensions(model) -> Dict:
-    """Analyze dimension distribution in PaLU model."""
+    """Analyze dimension distribution in PaLU model.
+
+    PaLU uses HeadwiseLowRankModule for k_proj/v_proj with SVD decomposition:
+    - VT: nn.Linear with out_features = sum(ranks) [GROUP-level, already aligned]
+    - U: nn.ModuleList of nn.Linear, each with in_features = ranks[i] [PER-HEAD level]
+
+    We need to detect per-head ranks from U[i].in_features or module.ranks attribute.
+    These are the dimensions that may be misaligned (e.g., 114, 117, 121, 125).
+    """
     dims = []
     aligned_8 = 0
     aligned_16 = 0
     total = 0
 
+    # Import HeadwiseLowRankModule for type checking
+    try:
+        from palu.model.modules.svd_linear import HeadwiseLowRankModule
+        has_palu = True
+    except ImportError:
+        has_palu = False
+
     for name, module in model.named_modules():
-        if hasattr(module, 'weight') and isinstance(module, torch.nn.Linear):
-            # Look for compressed dimensions in attention layers
+        # Check for PaLU's HeadwiseLowRankModule (k_proj/v_proj after SVD)
+        if has_palu and isinstance(module, HeadwiseLowRankModule):
+            # Get per-head ranks from the module's ranks attribute
+            # Each rank is the compressed dimension for one head group
+            for rank in module.ranks:
+                dims.append(rank)
+                total += 1
+                if rank % 8 == 0:
+                    aligned_8 += 1
+                if rank % 16 == 0:
+                    aligned_16 += 1
+        # Fallback: check for standard nn.Linear in attention projections
+        elif hasattr(module, 'weight') and isinstance(module, torch.nn.Linear):
             if any(proj in name.lower() for proj in ['k_proj', 'v_proj']):
+                # This handles baseline (non-PaLU) models
                 dim = module.out_features
                 dims.append(dim)
                 total += 1
@@ -596,6 +623,12 @@ def main():
     print(f"  Memory overhead: {repair_info['memory_overhead_pct']:.2f}%")
     print(f"  Affected layers: {repair_info['affected_layers']}")
     print(f"  After repair - Misaligned: {repair_info['after']['misaligned_pct']:.1f}%")
+
+    # Free original PaLU model before benchmarking repaired model to avoid double memory
+    del palu_model
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
 
     results["palu_repair"] = run_variant("palu_repair", repaired_model, palu_tokenizer, config, repair_info)
 

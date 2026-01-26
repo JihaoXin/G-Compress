@@ -223,16 +223,36 @@ class DimensionRepairer:
         Focuses on attention projection layers where PaLU compression
         creates irregular head_dim values.
 
+        For PaLU models with HeadwiseLowRankModule:
+        - VT: nn.Linear with out_features = sum(ranks) [GROUP-level]
+        - U: nn.ModuleList of nn.Linear, each with in_features = ranks[i] [PER-HEAD]
+
+        We detect per-head ranks from module.ranks or U[i].in_features.
+
         Returns:
             Dict mapping layer names to their current head_dim values
         """
         dims = {}
+
+        # Try to import PaLU's HeadwiseLowRankModule
+        try:
+            from palu.model.modules.svd_linear import HeadwiseLowRankModule
+            has_palu = True
+        except ImportError:
+            has_palu = False
+
         for name, module in model.named_modules():
-            # Look for linear layers in attention projections
-            if isinstance(module, nn.Linear):
+            # Check for PaLU's HeadwiseLowRankModule (replaces k_proj/v_proj)
+            if has_palu and isinstance(module, HeadwiseLowRankModule):
+                # For each head group in this module, store per-head rank
+                for i, rank in enumerate(module.ranks):
+                    # Create unique key for each head group's rank
+                    dims[f"{name}.U.{i}"] = rank
+
+            # Fallback: check for standard nn.Linear in attention projections
+            elif isinstance(module, nn.Linear):
                 # Check for common attention projection patterns
                 if any(proj in name.lower() for proj in ['q_proj', 'k_proj', 'v_proj', 'o_proj']):
-                    # For compressed models, the inner dimension may be irregular
                     in_features = module.in_features
                     out_features = module.out_features
 
@@ -328,8 +348,9 @@ class DimensionRepairer:
         """
         Repair all attention dimensions in a model.
 
-        Note: This is a simplified implementation. Full integration with
-        PaLU models requires handling the specific SVD decomposition structure.
+        For PaLU models with HeadwiseLowRankModule:
+        - Pads U[i] layer: input dimension (rank) and corresponding VT output slice
+        - Updates module.ranks list to reflect new dimensions
 
         Args:
             model: Model to repair
@@ -342,10 +363,20 @@ class DimensionRepairer:
             import copy
             model = copy.deepcopy(model)
 
+        # Try to import PaLU's HeadwiseLowRankModule
+        try:
+            from palu.model.modules.svd_linear import HeadwiseLowRankModule
+            has_palu = True
+        except ImportError:
+            has_palu = False
+
         plan = self.compute_repair_plan(model)
 
         original_dims = {}
         repaired_dims = {}
+
+        # Group repairs by HeadwiseLowRankModule for batch processing
+        palu_repairs = {}  # {module_name: {idx: (orig, target)}}
 
         for name, (orig, target) in plan.items():
             original_dims[name] = orig
@@ -354,28 +385,93 @@ class DimensionRepairer:
             if orig == target:
                 continue
 
-            # Navigate to the layer
-            parts = name.split('.')
-            parent = model
-            for part in parts[:-1]:
-                parent = getattr(parent, part)
-            layer_name = parts[-1]
-            layer = getattr(parent, layer_name)
+            # Check if this is a PaLU U layer (format: module_name.U.idx)
+            if '.U.' in name and has_palu:
+                # Parse module name and head index
+                parts = name.rsplit('.U.', 1)
+                module_name = parts[0]
+                head_idx = int(parts[1])
 
-            if not isinstance(layer, nn.Linear):
-                continue
-
-            # Determine which dimension to pad
-            if 'k_proj' in name.lower() or 'v_proj' in name.lower():
-                dim_axis = "out"  # Pad output dimension
-            elif 'o_proj' in name.lower():
-                dim_axis = "in"   # Pad input dimension
+                if module_name not in palu_repairs:
+                    palu_repairs[module_name] = {}
+                palu_repairs[module_name][head_idx] = (orig, target)
             else:
-                continue
+                # Handle standard nn.Linear layers
+                parts = name.split('.')
+                parent = model
+                for part in parts[:-1]:
+                    parent = getattr(parent, part)
+                layer_name = parts[-1]
+                layer = getattr(parent, layer_name)
 
-            # Apply repair
-            new_layer = self.repair_linear_layer(layer, dim_axis, target)
-            setattr(parent, layer_name, new_layer)
+                if not isinstance(layer, nn.Linear):
+                    continue
+
+                # Determine which dimension to pad
+                if 'k_proj' in name.lower() or 'v_proj' in name.lower():
+                    dim_axis = "out"
+                elif 'o_proj' in name.lower():
+                    dim_axis = "in"
+                else:
+                    continue
+
+                new_layer = self.repair_linear_layer(layer, dim_axis, target)
+                setattr(parent, layer_name, new_layer)
+
+        # Apply PaLU-specific repairs
+        if has_palu and palu_repairs:
+            for module_name, head_repairs in palu_repairs.items():
+                # Navigate to the HeadwiseLowRankModule
+                parts = module_name.split('.')
+                module = model
+                for part in parts:
+                    module = getattr(module, part)
+
+                if not isinstance(module, HeadwiseLowRankModule):
+                    continue
+
+                # Repair each U[i] layer and update VT accordingly
+                new_ranks = list(module.ranks)
+                for head_idx, (orig, target) in head_repairs.items():
+                    # Pad U[head_idx]: input dimension (rank -> target)
+                    u_layer = module.U[head_idx]
+                    new_u = self.repair_linear_layer(u_layer, "in", target)
+                    module.U[head_idx] = new_u
+                    new_ranks[head_idx] = target
+
+                # Update VT to match new total ranks
+                # VT.weight shape: [sum(ranks), in_features]
+                old_total = sum(module.ranks)
+                new_total = sum(new_ranks)
+
+                if old_total != new_total:
+                    vt_weight = module.VT.weight.data  # [sum(ranks), in_features]
+                    in_features = vt_weight.shape[1]
+
+                    # Build new VT weight by padding each head's slice
+                    new_vt_slices = []
+                    old_offset = 0
+                    for i, (old_rank, new_rank) in enumerate(zip(module.ranks, new_ranks)):
+                        old_slice = vt_weight[old_offset:old_offset + old_rank, :]
+                        if new_rank > old_rank:
+                            pad_size = new_rank - old_rank
+                            pad = torch.zeros(pad_size, in_features,
+                                            dtype=vt_weight.dtype, device=vt_weight.device)
+                            new_slice = torch.cat([old_slice, pad], dim=0)
+                        else:
+                            new_slice = old_slice
+                        new_vt_slices.append(new_slice)
+                        old_offset += old_rank
+
+                    new_vt_weight = torch.cat(new_vt_slices, dim=0)
+
+                    # Create new VT layer
+                    new_vt = nn.Linear(in_features, new_total, bias=False)
+                    new_vt.weight.data = new_vt_weight
+                    module.VT = new_vt
+
+                # Update ranks list
+                module.ranks = new_ranks
 
         # Calculate memory overhead
         total_orig = sum(original_dims.values())
