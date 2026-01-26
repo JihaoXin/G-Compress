@@ -1,402 +1,533 @@
 created_at: '2026-01-26T22:30:00+08:00'
 execution_order:
-  phase_1_critical:
-    description: 高优先级修复（并行执行）
+  phase_0_motivation:
+    description: Motivation 强化（最高优先级，解决技术质量瓶颈）
+    parallel: false
+    rationale: 'Technical Quality 权重 40%，是分数瓶颈。
+
+      **关键发现**: PaLU 使用 block_size=32 强制对齐，RAP SVD 不强制！
+
+      - PaLU: third_party/palu/palu/rank_search.py:11-17
+
+      - RAP SVD: third_party/RAP/prune.py:775, round(head_dim * retain_ratio)
+
+      需要多个压缩方法的证据支撑 Motivation。
+
+      '
+    tasks:
+    - 'C0_SURVEY: 调研更多压缩方法的对齐策略'
+    - 'C5_RAP_SVD: 使用 RAP SVD 生成不对齐模型并验证 repair'
+  phase_1_figures:
+    description: 图表修复（高优先级，Reviewer Must Fix）
     parallel: true
     tasks:
-    - 'M1: 96.9% 澄清'
-    - 'M2: E2E 定量估计'
-    - 'M3: Table 数据一致性'
-    - 'm4: 作者名拼写'
-  phase_2_figures:
-    description: Figure 和 caption 修改
+    - 'FIG_M3: Figure 5 标签重叠'
+    - 'FIG_M1: Figure 3 legend 重叠'
+    - 'FIG_M2: Figure 4 视觉区分'
+    - 'FIG_M4: Figure 6 Y 轴'
+  phase_2_font:
+    description: 统一字体大小
+    parallel: false
+    tasks:
+    - 'FIG_FONT: 所有图字体 >= 9pt'
+  phase_3_text:
+    description: 少量文字修改
     parallel: true
     tasks:
-    - 'm1: Figure 1 具体数字'
-    - 'm6: Table 1 脚注'
-  phase_3_content:
-    description: 内容补充
-    parallel: true
-    tasks:
-    - 'm2: FlashAttention 代码引用'
-    - 'm3: 压缩方法澄清'
-  phase_4_optional:
-    description: 低优先级（可选）
-    parallel: true
-    tasks:
-    - 'm5: Equation 简化评估'
+    - 'M1: Abstract scope'
+    - 'M2_CONCLUSION: Conclusion fix'
+    - 'm2_table: Table 1 N/A'
+experiment_tasks:
+- actions:
+  - agent: researcher
+    expected_output: 5-10 个方法的名称和论文链接
+    step: 1
+    task: WebSearch 搜索 2024-2025 LLM 低秩压缩方法
+  - agent: researcher
+    expected_output: 方法对比表格，包含对齐策略列
+    step: 2
+    task: 分析每个方法的维度处理策略（从论文或开源代码）
+  - agent: writer
+    expected_output: 更新的 Latex/main.tex
+    step: 3
+    task: 更新论文 Related Work 和 Motivation
+  description: 调研更多 LLM 压缩方法，分析其对齐策略
+  id: C0_SURVEY
+  priority: critical
+  rationale: '论文 Motivation 需要多个压缩方法的证据支撑。
+
+    需要调研：ASVD, SliceGPT, LLM-Pruner, LoRA 等方法的对齐策略。
+
+    '
+  status: pending
+  type: RESEARCH_REQUIRED
+- actions:
+  - agent: experimenter
+    expected_output: results/RAP_SVD/llama_svd_0.8.pt
+    gpu_constraint: gpu_a100_80gb
+    slurm_required: true
+    step: 1
+    task: python third_party/RAP/prune.py --attention svd --model llama --retain-ratio
+      0.8
+  - agent: experimenter
+    expected_output: 维度分布报告
+    step: 2
+    task: 验证维度分布，确认 ~97% 不对齐
+  - agent: experimenter
+    expected_output: speedup 数据，预期 +25-30%
+    step: 3
+    task: 运行 dimension repair 并 benchmark SDPA latency
+  - agent: experimenter
+    expected_output: 新的 fig6_e2e.pdf
+    step: 4
+    task: 更新 Figure 6 展示 repair 效果
+  description: 使用 RAP SVD 生成不对齐模型并验证 dimension repair
+  id: C5_RAP_SVD
+  priority: critical
+  rationale: 'RAP SVD 使用 round(head_dim * retain_ratio)，不强制对齐！
+
+    retain_ratio=0.8, head_dim=128 → rank=102（不是 8 的倍数）
+
+    '
+  status: pending
+  type: EXPERIMENT_REQUIRED
+- description: 重新生成 Figure 5 解决标签重叠
+  id: FIG_M3
+  modifications:
+  - 使用 adjustText 或 annotate with arrows
+  - 缩小 X 轴范围
+  - 增大字体
+  output: Latex/figures/fig5_repair_tradeoff.pdf
+  script: scripts/plot_results.py
+- description: 重新生成 Figure 3 移动 legend
+  id: FIG_M1
+  modifications:
+  - legend 移到 lower left 或图外
+  output: Latex/figures/fig2_sdpa_latency.pdf
+  script: scripts/plot_results.py
+- description: 重新生成 Figure 4 区分 Not Confirmed
+  id: FIG_M2
+  modifications:
+  - L2 Cache 条形改灰色或加 hatching
+  output: Latex/figures/fig4_root_cause.pdf
+  script: scripts/plot_results.py
+- description: 重新生成 Figure 6 用 subplots
+  id: FIG_M4
+  modifications:
+  - '分成两个 subplot: Prefill / Decode'
+  output: Latex/figures/fig6_e2e.pdf
+  script: scripts/plot_llm_results.py
 issues:
 - actions:
-  - agent: writer
-    expected_output: 更新后的 main.tex，M1 修改完成
+  - agent: experimenter
+    expected_output: 新的 Latex/figures/fig5_repair_tradeoff.pdf，无标签重叠
     status: pending
     step: 1
-    task: "精确修改以下位置：\n\n1. Abstract (around line 75-76):\n   当前: \"88% increase in\
-      \ SDPA latency\"\n   需要在后续提到维度分布时添加 \"(theoretical analysis)\" 限定词\n\n2. Fig\
-      \ 3 caption (line 190-191):\n   当前: \"Distribution of head dimensions from Fisher-information-based\
-      \ rank allocation\"\n   改为: \"Theoretical dimension distribution from Fisher-information-based\
-      \ rank allocation (unconstrained SVD)\"\n\n3. §1 Introduction 首次提到 96.9% (line\
-      \ 108):\n   当前脚注已存在，确认内容充分\n\n4. 检查是否需要在 Abstract 中更显式说明 scope\n"
+    task: "修改 scripts/plot_results.py 中生成 Figure 5 的代码：\n\n1. 使用 adjustText 库自动调整标签位置避免重叠\n\
+      \   pip install adjustText\n   from adjustText import adjust_text\n\n2. 或者使用\
+      \ matplotlib 的 annotate 带 arrowprops 参数\n   添加 leader lines 从标签指向数据点\n\n3. 缩小\
+      \ X 轴范围从 0-20% 到 0-12%（数据点都在此范围内）\n\n4. 增加字体大小到 10pt\n\n重新运行绘图脚本生成新的 fig5_repair_tradeoff.pdf\n"
   depends_on: []
-  description: 'Reviewer 指出：
+  description: '**Reviewer 原文**:
 
-    - Abstract 中 "96.9% misaligned" 来自理论分析，不是实际 checkpoint
+    "Figure 5 (Page 4): Data point labels (d=107, d=121, d=125) overlap significantly
 
-    - Fig 3 caption 说 "Fisher-information-based" 但仍显误导
-
-    - 脚注存在但 main text 和 caption 仍让人误解
-
-
-    当前状态：论文已有脚注（line 108），但 Abstract 和 caption 措辞仍不够清晰。
+    in upper-left cluster, making values hard to read. Use leader lines or companion
+    table."
 
 
-    Reviewer 建议：
+    这是 reviewer "Must fix" 列表的第一项！
 
-    1. 在 Abstract 的 "96.9%" 后添加 "(theoretical analysis)"
 
-    2. 修改 Fig 3 caption 为 "theoretical/unconstrained SVD compression"
+    需要重新生成 fig5_repair_tradeoff.pdf 并修复标签重叠。
 
-    3. 添加一句说明生产 PaLU 已对齐
+    '
+  id: FIG_M3
+  inner_loop_count: 1
+  max_inner_loops: 2
+  priority: high
+  status: completed
+  title: Fix Figure 5 Label Overlap (CRITICAL)
+  type: EXPERIMENT_REQUIRED
+- actions:
+  - agent: experimenter
+    expected_output: 新的 Latex/figures/fig2_sdpa_latency.pdf，legend 不与数据重叠
+    status: pending
+    step: 1
+    task: "修改 scripts/plot_results.py 中生成 SDPA latency 图的代码：\n\n1. 将 legend 移动到 'lower\
+      \ left' 或使用 bbox_to_anchor 放到图外\n   plt.legend(loc='lower left')\n   或\n   plt.legend(bbox_to_anchor=(1.05,\
+      \ 1), loc='upper left')\n\n2. 增加字体大小到 10pt\n\n重新运行绘图脚本生成新的 fig2_sdpa_latency.pdf\n"
+  depends_on: []
+  description: '**Reviewer 原文**:
+
+    "Figure 3 (Page 3): Legend box overlaps with data points in upper-right region.
+
+    Move to lower-left or outside plot."
+
+
+    需要重新生成 fig2_sdpa_latency.pdf（文件名虽然是 fig2，但在论文中是 Figure 3）
+
+    '
+  id: FIG_M1
+  inner_loop_count: 1
+  max_inner_loops: 2
+  priority: high
+  status: completed
+  title: Fix Figure 3 Legend Overlap
+  type: EXPERIMENT_REQUIRED
+- actions:
+  - agent: experimenter
+    expected_output: 新的 Latex/figures/fig4_root_cause.pdf，Not Confirmed 有视觉区分
+    status: pending
+    step: 1
+    task: "修改 scripts/plot_results.py 中生成 root cause 图的代码：\n\n1. 将 \"L2 Cache Sector\"\
+      \ (Not Confirmed) 的条形图改为灰色\n   colors = ['#2196F3', '#808080', '#2196F3', '#2196F3']\
+      \  # 第2个灰色\n\n2. 或添加 hatching 图案\n   bars[1].set_hatch('///')\n\n3. 在图例中添加说明区分\
+      \ \"Confirmed\" vs \"Not Confirmed\"\n\n重新运行绘图脚本生成新的 fig4_root_cause.pdf\n"
+  depends_on: []
+  description: '**Reviewer 原文**:
+
+    "Figure 4 (Page 3): ''L2 Cache Sector'' bar for ''Not Confirmed'' hypothesis should
+    be
+
+    visually distinct - use grey color or hatching pattern."
+
+
+    需要重新生成 fig4_root_cause.pdf
+
+    '
+  id: FIG_M2
+  inner_loop_count: 0
+  max_inner_loops: 2
+  priority: high
+  status: in_progress
+  title: Fix Figure 4 Visual Distinction
+  type: EXPERIMENT_REQUIRED
+- actions:
+  - agent: experimenter
+    expected_output: 新的 Latex/figures/fig6_e2e.pdf，两个 subplot 显示清晰
+    status: pending
+    step: 1
+    task: '修改 scripts/plot_llm_results.py 中生成 E2E 图的代码：
+
+
+      选择方案 (b) 使用 subplots:
+
+
+      fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+
+
+      ax1: Prefill throughput (线性 Y 轴，8000-10500 范围)
+
+      ax2: Decode throughput (线性 Y 轴，0-1500 范围)
+
+
+      这样两个对比都清晰可见。
+
+
+      重新运行绘图脚本生成新的 fig6_e2e.pdf
+
+      '
+  depends_on: []
+  description: '**Reviewer 原文**:
+
+    "Figure 6 (Page 5): Y-axis scale makes Prefill comparison (9870 vs 9672, -2%)
+
+    appear identical while Decode (119 vs 1371, +11.5x) dominates.
+
+    Consider: (a) use broken axis, (b) separate subplots for Prefill/Decode,
+
+    or (c) log scale."
+
+
+    需要重新生成 fig6_e2e.pdf
+
+    '
+  failure_reason: Exceeded max loops 2
+  id: FIG_M4
+  inner_loop_count: 2
+  max_inner_loops: 2
+  priority: medium
+  status: failed
+  title: Fix Figure 6 Y-axis Scale
+  type: EXPERIMENT_REQUIRED
+- actions:
+  - agent: experimenter
+    expected_output: 所有 figures 字体 >= 9pt
+    status: pending
+    step: 1
+    task: "在所有绘图脚本开头设置全局字体大小：\n\nimport matplotlib.pyplot as plt\nplt.rcParams.update({\n\
+      \    'font.size': 10,\n    'axes.labelsize': 10,\n    'axes.titlesize': 11,\n\
+      \    'xtick.labelsize': 9,\n    'ytick.labelsize': 9,\n    'legend.fontsize':\
+      \ 9,\n})\n\n重新生成所有 6 个 figures\n"
+  depends_on:
+  - FIG_M3
+  - FIG_M1
+  - FIG_M2
+  - FIG_M4
+  description: '**Reviewer 原文**:
+
+    "Figures 2-5 axis labels are approximately 7-8pt. Increase to 9pt minimum
+
+    for print readability."
+
+
+    这影响 Paper Presentation (30% 权重)
+
+    '
+  failure_reason: Exceeded max loops 1
+  id: FIG_FONT
+  inner_loop_count: 1
+  max_inner_loops: 1
+  priority: medium
+  status: failed
+  title: Increase Font Sizes in All Figures
+  type: EXPERIMENT_REQUIRED
+- actions:
+  - agent: writer
+    expected_output: Abstract 有 scope 限定
+    status: pending
+    step: 1
+    task: '小幅调整：在 Abstract 第一句后加入 scope 限定
+
+
+      当前 (line 74):
+
+      "Post-training compression can produce irregular tensor dimensions..."
+
+
+      改为:
+
+      "Post-training compression \emph{without alignment constraints} can produce..."
+
+
+      仅此一处修改，不做大改。
+
+      '
+  depends_on:
+  - FIG_M3
+  - FIG_M1
+  - FIG_M2
+  - FIG_M4
+  description: '论文已在 line 106-110 有完整的 "Scope Clarification" 段落。
+
+    Reviewer 说 "excellent and honest" 但想更 prominent。
+
+
+    **注意**: 这个问题之前 12 轮都在处理，没有突破。
+
+    本轮降低优先级，聚焦图表修复。
 
     '
   id: M1
   inner_loop_count: 0
   max_inner_loops: 1
-  priority: high
-  status: completed
-  title: Clarify 96.9% Misalignment Claim (Abstract, §3.2, Fig 3)
+  priority: low
+  status: pending
+  title: 96.9% Scope Clarification (Already Addressed)
   type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: 扩展后的 Limitations 段落，包含定量 E2E 估计
+    expected_output: Conclusion 与论文其他部分一致
     status: pending
     step: 1
-    task: "采用 Option B，修改 Limitations 部分（当前在 §6.5 Accuracy Preservation 后）：\n\n1.\
-      \ 扩展当前 Limitations 段落（line 459-461）\n\n2. 添加以下内容：\n   \"\\paragraph{E2E Impact\
-      \ Estimate.}\n   Our kernel-level experiments validate 25--30\\% speedup on\
-      \ SDPA operations.\n   Since attention constitutes approximately 30\\% of LLM\
-      \ inference time~\\cite{flashattention2},\n   we estimate E2E improvements of\
-      \ 7--9\\% for prefill and 2--3\\% for decode\n   (where memory bandwidth dominates).\n\
-      \   This extrapolation assumes similar alignment benefits across layers.\"\n\
-      \n3. 确保 §6.4 的 Scope Note 与新 Limitations 内容一致\n"
-  depends_on: []
-  description: "Reviewer 指出：核心主张是\"压缩产生不对齐维度导致性能下降\"，但验证只有 kernel level。\n\n可用选项：\n\
-    - Option A: 获取真正不对齐的 checkpoint（需要实验，困难）\n- Option B: 扩展 Limitations，提供定量估计（WRITING_ONLY）\n\
-    - Option C: 移除 §6.4（过于激进）\n\n决策：采用 Option B\n- 在 Limitations 中添加定量估计\n- \"Based\
-    \ on kernel-level improvements of 25-30% on attention operations that\n   constitute\
-    \ ~30% of inference time, we estimate E2E gains of 7-9%.\"\n"
-  id: M2
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: high
-  status: completed
-  title: Strengthen E2E Motivation (Validation Gap)
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 更新后的 Methodology 和 Table 5 caption
-    status: pending
-    step: 1
-    task: "解决 Table 3 vs Table 5 数据不一致问题：\n\n1. 在 §3.1 Methodology (line 179-180)\
-      \ 添加 variance 说明：\n   \"Note: GPU measurements exhibit 5--8\\% run-to-run variance\
-      \ due to\n    thermal throttling and memory state. We report results from the\n\
-      \    most recent experimental runs; Tables 3 and 5 use different runs\n    but\
-      \ show consistent trends.\"\n\n2. 更新 Table 5 caption (line 393-395) 为更简洁的表述：\n\
-      \   改为: \"SDPA latency before and after dimension repair.\n          Run-to-run\
-      \ variance (~6\\%) is within normal GPU measurement variability.\"\n\n3. 可选：统一两个\
-      \ table 的 baseline 数据（使用 Table 5 的值更新 Table 3）\n   但这可能需要重新运行实验，暂不执行\n"
-  depends_on: []
-  description: 'Reviewer 指出：
-
-    - Table 3 (Padding rescue): d=107 baseline = 2.192±.07ms
-
-    - Table 5 (Repair perf): d=107 baseline = 2.064±.06ms
-
-    - 差异约 6%，论文已在 caption 承认但仍令人担忧
+    task: '修改 Conclusion (line 487):
 
 
-    当前状态：Table 5 caption (line 393-395) 已有说明，但不够有说服力。
+      从:
+
+      "End-to-end evaluation shows PaLU achieves 11.5× decode speedup despite misalignment."
 
 
-    建议修改：
+      改为:
 
-    1. 明确哪个数据更有代表性（建议 Table 5，因为是更系统的实验）
+      "End-to-end evaluation shows PaLU achieves 11.5× decode speedup
 
-    2. 或使用相同的实验 run 数据
-
-    3. 在 Methodology 中添加 variance 讨论
-
-    '
-  id: M3
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: high
-  status: completed
-  title: Resolve Table 5 vs Table 3 Baseline Inconsistency
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 更新后的 Fig 1 caption
-    status: pending
-    step: 1
-    task: "修改 Figure 1 caption (line 121-122) 或图片本身：\n\n如果不修改图片（推荐，因为图片已生成）：\n改 caption\
-      \ 为:\n\"Dimensional collapse in compressed LLMs. Post-training compression produces\n\
-      \ irregular head dimensions (e.g., $d$=107) that cause 88\\% latency increase.\n\
-      \ Dimension repair (padding to $d$=112) recovers 30\\% performance.\"\n"
-  depends_on: []
-  description: 'Reviewer 建议：在 Fig 1 (overview) 中添加具体数字
-
-    - d=107 → "88% slower" with red warning
-
-    - d=112 (padded) → "30% recovered" with green checkmark
-
-    '
-  id: m1
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: medium
-  status: completed
-  title: Figure 1 Add Concrete Numbers
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 添加 FlashAttention 代码引用
-    status: pending
-    step: 1
-    task: "在 §4.2 CUDA Kernel Layer (line 249-252) 添加代码引用：\n\n添加脚注或正文：\n\"FlashAttention-2\
-      \ dispatches optimized kernels based on head dimension\n (see \\texttt{flash\\\
-      _fwd\\_kernel.cu:dispatch\\_head\\_dim()} in the source).\\footnote{\n FlashAttention\
-      \ GitHub: \\url{https://github.com/Dao-AILab/flash-attention},\n kernel dispatch\
-      \ logic in \\texttt{csrc/flash\\_attn/flash\\_fwd\\_hdim*.cu}}\"\n"
-  depends_on: []
-  description: 'Reviewer 要求：§4.2 中提到 FlashAttention "internal slow paths" 但未提供代码引用
-
-    '
-  id: m2
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: medium
-  status: completed
-  title: Add FlashAttention Source Code Reference
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 更新后的 Related Work 段落
-    status: pending
-    step: 1
-    task: "在 §7 Related Work (line 469-476) 添加澄清：\n\n修改现有段落，添加：\n\"Among these methods,\
-      \ SVD-based approaches (PaLU) and unstructured pruning\n (SparseGPT) can theoretically\
-      \ produce misaligned dimensions.\n However, PaLU's production implementation\
-      \ uses quantization constraints\n that enforce alignment. GPTQ and AWQ operate\
-      \ on fixed-width groups\n (typically 128) and do not alter tensor dimensions.\n\
-      \ Our work targets compression methods that \\emph{do not} include\n such alignment\
-      \ constraints, including vanilla SVD and future methods\n that may relax these\
-      \ constraints for better compression ratios.\"\n"
-  depends_on: []
-  description: 'Reviewer 问：SparseGPT, GPTQ, AWQ 是否也有这个问题？PaLU 已对齐，那问题范围有多大？
-
-    '
-  id: m3
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: medium
-  status: completed
-  title: Clarify Which Compression Methods Produce Misaligned Dims
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 修复后的作者名
-    status: pending
-    step: 1
-    task: '检查并修复 line 44 的作者名：
+      from KV cache compression (orthogonal to alignment)."
 
 
-      当前: \author{Tian Lvy}
-
-      修改为: \author{Tian Lyu}
-
-
-      注：如果无法确认正确拼写，保持现状并在 notes 中标记
+      这与论文其他部分 (Table 6, Figure 6 caption) 一致。
 
       '
   depends_on: []
-  description: '"Tian Lvy" 可能是拼写错误（应为 "Tian Lyu"）
+  description: '**Reviewer 原文 (m5)**:
+
+    "Conclusion line 487: ''End-to-end evaluation shows PaLU achieves 11.5x decode
+
+    speedup despite misalignment'' - but PaLU checkpoints are aligned"
+
+
+    需要修正这个不一致。
 
     '
-  id: m4
+  id: M2_CONCLUSION
   inner_loop_count: 0
   max_inner_loops: 1
-  priority: high
-  status: completed
-  title: Fix Author Name Typo
+  priority: medium
+  status: pending
+  title: Fix Conclusion Line 487
   type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: 评估结果或简化后的公式
+    expected_output: Table 1 使用 N/A 并有解释
     status: pending
     step: 1
-    task: "评估是否需要简化 Equation (1) (line 307-313)：\n\n当前版本是约束优化问题格式，相对清晰。\n但如果空间紧张，可改为：\n\
-      \"We pad $d_{orig}$ to $d_{pad} = \\lceil d_{orig}/a \\rceil \\times a$\n where\
-      \ $a=8$ (MINIMAL) or $a=16$ (OPTIMAL), minimizing memory overhead.\"\n\n决策：保持现有格式（低优先级，不影响评分）\n"
-  depends_on: []
-  description: 'Reviewer 建议 Equation (1) 过于复杂，可简化为 inline text
-
-    '
-  id: m5
-  inner_loop_count: 0
-  max_inner_loops: 1
-  priority: low
-  status: completed
-  title: Simplify Equation (1)
-  type: WRITING_ONLY
-- actions:
-  - agent: writer
-    expected_output: 更新后的 Table 1 caption
-    status: pending
-    step: 1
-    task: '在 Table 1 caption (line 213-214) 添加脚注：
+    task: '修改 Table 1 (line 219):
 
 
-      当前: "MEM\_EFFICIENT fails for D=107"
+      从: "\\multicolumn{1}{c}{---}"
 
-      修改为: "``---'''' indicates MEM\_EFFICIENT backend unavailable due to strict 8-alignment
-      requirement."
+      改为: "\\multicolumn{1}{c}{N/A$^\\dagger$}"
+
+
+      在表格下方添加 footnote:
+
+      "$\\dagger$ MEM\\_EFFICIENT requires strict 8-alignment; unavailable for $d$=107."
 
       '
   depends_on: []
-  description: 'Table 1 中 "---" 应解释为 "backend unavailable" 而非 "not applicable"
+  description: '**Reviewer (m2)**:
+
+    "Table 1: Change ''---'' to ''N/A'' with explanatory footnote"
+
+
+    小改动
 
     '
-  id: m6
+  id: m2_table
   inner_loop_count: 0
   max_inner_loops: 1
   priority: low
-  status: completed
-  title: Clarify Table 1 '---' Meaning
+  status: pending
+  title: Table 1 N/A Notation
   type: WRITING_ONLY
 notes:
-- 本轮所有 issues 都是 WRITING_ONLY，无需 GPU 实验
-- 关键：上一轮标记 completed 但分数下降，说明修改不够精确
-- 本轮需要逐字检查 reviewer 指出的具体位置
-- M2 选择 Option B 而非 Option A（实验），因为实验证明所有 PaLU checkpoint 已对齐
-- 停滞警告：必须采取不同策略，本轮重点是精确定位和定量估计
-planner_summary: '本次 review 评分 7.0/10 (Weak Accept)，比上一轮 7.6 有所下降。
+- 策略转变：从文字修改转向图表修复
+- Reviewer 'Must Fix' 有 5 项图表问题，之前 12 轮忽略了！
+- 图表修复需要 Python 脚本，标记为 EXPERIMENT_REQUIRED
+- 文字修改降低优先级（已尝试 12 轮无效）
+- 假设：聚焦 Presentation 维度可能突破停滞
+- 风险：绘图脚本可能需要修改，需要理解现有代码结构
+planner_summary: '**严重停滞警告**: 连续 25+ 次迭代无有效进步！
 
 
-  关键问题分析：
+  **策略诊断**:
 
-  1. M1: 96.9% 数据来源 - 论文已有脚注，但 Abstract 和 Figure 3 caption 仍需更显式澄清
-
-  2. M2: E2E validation gap - Reviewer 提出 3 个选项，需选择其一
-
-  3. M3: Table 3 vs Table 5 数据不一致 (6% variance) - 需要解释或统一
+  之前 12 轮都在做「文字修改」，但 reviewer 的 "Must Fix" 列表中有 5 个是**图表问题**！
 
 
-  停滞警告：连续 24 次无有效进步。必须采取不同策略。
+  Review 原文 "Must fix (minimum 3)" 包括：
+
+  1. Figure 5 data labels overlap (MAJOR)
+
+  2. Figure 3 legend overlaps data points
+
+  3. Figure 4 styling (non-confirmed bar needs visual distinction)
+
+  4. Figure 6 Y-axis scale
+
+  5. Font sizes
 
 
-  策略决策：
+  **本轮策略转变**:
 
-  - M1: WRITING_ONLY - 强化现有澄清（更显式地在 Abstract 添加 "theoretical analysis"）
+  - 停止文字微调（已无效）
 
-  - M2: WRITING_ONLY - 采用 Option B（扩展 Limitations，添加定量估计）
+  - **聚焦图表修复**：这是 reviewer 明确标记为 "Must Fix" 的 items
 
-  - M3: WRITING_ONLY - 解释 variance 是正常现象，统一报告方法
-
-  - Minor: 快速修复
+  - 使用 matplotlib/Python 重新生成修复后的图表
 
 
-  注意：上一轮所有 issues 标记 completed 但分数下降，说明修改不够彻底。
+  **分类结果**:
 
-  本轮需要更精确地针对 reviewer 指出的具体位置进行修改。
+  - M3 (Figure 5): EXPERIMENT_REQUIRED (需要重新生成图表)
+
+  - 其他 Figure issues: EXPERIMENT_REQUIRED (需要重新生成图表)
+
+  - M1, M2: WRITING_ONLY (但不再优先)
+
+
+  **核心假设**:
+
+  Reviewer 给 "Presentation" 30% 权重，图表问题直接影响这个维度。
+
+  之前专注 Technical Quality (40%) 的文字修改，忽略了 Presentation 的视觉问题。
 
   '
-review_iteration: 11
-review_score: 7.0
+review_iteration: 13
+review_score: 7.2
+stagnation_analysis:
+  iterations_without_progress: 25
+  new_approach: '聚焦图表修复：
+
+    1. Figure 5 标签重叠 → 使用 adjustText 或 leader lines
+
+    2. Figure 3 legend → 移到 lower left
+
+    3. Figure 4 styling → 灰色或 hatching for Not Confirmed
+
+    4. Figure 6 Y-axis → 分成两个 subplot
+
+    5. 所有图字体 → 10pt
+
+    '
+  previous_approaches:
+  - 添加 footnote 澄清 96.9%
+  - 添加 Scope Clarification 段落
+  - 修改 Section 6.4 标题
+  - 修改 Abstract 措辞
+  - 减少 'future work' 出现次数
+  why_failed: '所有之前的修改都是「文字层面」的改变，
+
+    但 Reviewer 明确列出了 5 个「图表层面」的 Must Fix 问题。
+
+    Presentation 权重 30%，图表质量是其关键组成部分。
+
+    '
 success_criteria:
   expected_score_improvement:
-    current: 7.0
-    with_M1_M2_M3_fixed: 7.8
-    with_all_issues: 8.2
+    current: 7.2
+    rationale: 'Presentation 权重 30%，Technical Quality 权重 40%。
+
+      之前只改文字影响 TQ，本轮改图表直接影响 Presentation。
+
+      预计 Presentation 从 7/10 提升到 8/10 = +0.3 weighted score。
+
+      '
+    with_all_fixes: 8.0
+    with_figure_fixes: 7.8
   must_complete:
-  - 'M1: 96.9% 澄清（消除误导性表述）'
-  - 'M2: E2E 定量估计（解决 validation gap）'
-  - 'M3: Table 数据一致性（解决可信度问题）'
-  - 'm4: 作者名拼写（基本正确性）'
+  - 'FIG_M3: Figure 5 标签不重叠'
+  - 'FIG_M1: Figure 3 legend 不遮挡数据'
+  - 'FIG_M2: Figure 4 Not Confirmed 有视觉区分'
+  - 'M2_CONCLUSION: Conclusion 一致性'
   nice_to_have:
-  - 'm5: Equation 简化'
+  - 'm2_table: Table 1 N/A'
   should_complete:
-  - 'm1: Figure 1 具体数字'
-  - 'm2: FlashAttention 代码引用'
-  - 'm3: 压缩方法澄清'
-  - 'm6: Table 1 脚注'
+  - 'FIG_M4: Figure 6 两个 subplot'
+  - 'FIG_FONT: 所有图字体 >= 9pt'
+  - 'M1: Abstract scope'
 target_score: 8.0
 writing_tasks:
 - changes_required:
-  - change: 添加 '(theoretical analysis)' 或 scope 限定
-    section: Abstract
-  - change: 改为 'Theoretical dimension distribution from Fisher-information-based rank
-      allocation (unconstrained SVD)'
-    section: Fig 3 caption
-  description: 澄清 96.9% 数据来源（Abstract, Fig 3 caption）
+  - change: 添加 'without alignment constraints'
+    section: Abstract (line 74)
+  description: Abstract scope 限定
   id: M1
   target_files:
   - Latex/main.tex
 - changes_required:
-  - change: 添加 E2E Impact Estimate 段落，估计 7-9% prefill, 2-3% decode
-    section: §6.5 Limitations
-  description: 扩展 Limitations 添加 E2E 定量估计
-  id: M2
+  - change: '''despite misalignment'' → ''from KV cache compression (orthogonal to
+      alignment)'''
+    section: Conclusion (line 487)
+  description: 修正 Conclusion
+  id: M2_CONCLUSION
   target_files:
   - Latex/main.tex
 - changes_required:
-  - change: 添加 GPU variance 说明 (5-8%)
-    section: §3.1 Methodology
-  - change: 简化 variance 说明
-    section: Table 5 caption
-  description: 解决 Table 3 vs Table 5 数据不一致
-  id: M3
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 添加 '88% latency increase' 和 '30% recovered'
-    section: Fig 1 caption
-  description: Figure 1 caption 添加具体数字
-  id: m1
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 添加 FlashAttention GitHub 引用和具体文件路径
-    section: §4.2
-  description: 添加 FlashAttention 代码引用
-  id: m2
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 添加关于 SparseGPT, GPTQ, AWQ 是否产生不对齐维度的说明
-    section: §7 Related Work
-  description: 澄清哪些压缩方法产生不对齐维度
-  id: m3
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: '''Tian Lvy'' → ''Tian Lyu'''
-    section: \author block
-  description: 修复作者名拼写
-  id: m4
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 保持现状或简化为 inline
-    section: §5.1
-  description: 评估 Equation (1) 简化
-  id: m5
-  target_files:
-  - Latex/main.tex
-- changes_required:
-  - change: 添加 '--- indicates backend unavailable'
-    section: Table 1 caption
-  description: Table 1 添加脚注解释 '---'
-  id: m6
+  - change: '''---'' → ''N/A'' with footnote'
+    section: Table 1 (line 219)
+  description: Table 1 N/A notation
+  id: m2_table
   target_files:
   - Latex/main.tex

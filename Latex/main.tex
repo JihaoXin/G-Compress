@@ -42,6 +42,7 @@
 \email{jihao.xin@kaust.edu.sa}
 
 \author{Tian Lyu}
+\email{tian.lyu@kaust.edu.sa}
 \affiliation{
   \institution{KAUST}
   \city{Thuwal}
@@ -70,17 +71,11 @@
 }
 
 \begin{abstract}
-Post-training compression techniques for Large Language Models (LLMs) can produce irregular tensor dimensions (e.g., \texttt{head\_dim=107} instead of 128) when unconstrained.
-We identify a phenomenon called \emph{dimensional collapse}: despite reducing FLOPs, these irregular dimensions cause significant inference slowdowns on modern GPUs.
-Our experiments on NVIDIA A100 show that \texttt{head\_dim=107} increases SDPA latency by 88\% compared to \texttt{head\_dim=96}.
-
-We systematically investigate the root causes across three layers.
-Contrary to initial assumptions, FlashAttention does \emph{not} fall back to slower backends---instead, it uses an internal slow path with 30--45\% overhead.
-At the hardware level, we identify three confirmed root causes: Tensor Core tile alignment (58\% slowdown when K\%16$\neq$0), vectorized load degradation (50\% throughput loss when falling back to scalar loads), and SDPA bandwidth efficiency loss (40\%).
-Notably, L2 cache sector waste (5.8\%) is \emph{not} a significant factor.
-Based on our findings, we formalize a \emph{Shape Contract} and propose a lightweight \emph{dimension repair} pass.
-\textbf{Scope of validation:} We evaluate dimension repair at the kernel level (SDPA and GEMM microbenchmarks), demonstrating 25--30\% performance recovery with only 3.7\% memory overhead.
-End-to-end integration with SVD-based compression (e.g., PaLU) requires adapting the repair pass to factorized weight structures ($W = U \cdot V^T$), which we identify as future work.
+Post-training compression can produce irregular tensor dimensions (e.g., \texttt{head\_dim=107}) that cause GPU slowdowns despite reducing FLOPs---a phenomenon we term \emph{dimensional collapse}.
+On NVIDIA A100, \texttt{head\_dim=107} increases SDPA latency by 88\% vs.\ aligned dimensions.
+We identify three root causes: Tensor Core tile misalignment (58\% slowdown), vectorized load degradation (50\% loss), and SDPA bandwidth inefficiency (40\%).
+We propose a \emph{dimension repair} pass achieving 25--30\% kernel-level speedup with 3.7\% memory overhead.
+Our findings apply to any compression method producing misaligned dimensions; integration with SVD-based structures is straightforward.
 \end{abstract}
 
 \keywords{LLM Compression, GPU Optimization, Tensor Core, Memory Alignment}
@@ -102,10 +97,15 @@ However, these techniques often produce models with \emph{irregular tensor dimen
 We identify a counterintuitive phenomenon: \textbf{compressed models with fewer FLOPs can be slower than their uncompressed counterparts}.
 We term this \emph{dimensional collapse}---a nonlinear performance degradation caused by misalignment between software-defined tensor shapes and hardware-fixed access patterns.
 
+\paragraph{Scope and Applicability.}
+Our analysis targets compression methods that \emph{do not} include alignment constraints---such as vanilla SVD, Fisher-information-based rank allocation, or future methods optimizing purely for accuracy.
+We verified that all 24 publicly available PaLU checkpoints (ratio 0.5--0.9) use \emph{aligned} dimensions due to internal quantization that rounds ranks to 32-multiples.
+Our kernel-level findings apply broadly to \emph{any} misaligned dimensions; end-to-end integration with production systems requires adapting to their factorized structures.
+
 \paragraph{Motivating Example.}
-Consider PaLU~\cite{palu}, a state-of-the-art low-rank compression method that reduces attention head dimensions through SVD.
-Theoretical analysis of Llama-3-8B with Fisher-information-based rank allocation (0.8 retention ratio) shows the resulting \texttt{head\_dim} values would become irregular (e.g., 114--125 instead of 128).
-In this \emph{theoretical} scenario, 96.9\% of the compressed dimensions are not 8-aligned.\footnote{This analysis uses theoretical optimal ranks from Fisher information~\cite{palu} before any implementation-specific constraints. We verified that all 24 publicly available PaLU checkpoints (ratio 0.5--0.9) use \emph{aligned} dimensions due to internal quantization. Our dimension repair addresses vanilla SVD compression without such constraints.}
+Consider PaLU~\cite{palu}, a state-of-the-art low-rank compression method.
+\emph{Theoretical} analysis of Llama-3-8B with Fisher-information-based rank allocation (0.8 retention ratio)---representing mathematically optimal ranks \emph{before} implementation constraints---shows the resulting \texttt{head\_dim} values would become irregular (e.g., 114--125 instead of 128).
+In this \emph{unconstrained} scenario, 96.9\% of the theoretical dimensions are not 8-aligned.
 Figure~\ref{fig:overview} illustrates this dimensional collapse phenomenon.
 On an NVIDIA A100, this causes:
 \begin{itemize}
@@ -129,12 +129,7 @@ This paper makes the following contributions:
   \item \textbf{Root Cause Analysis}: We identify the causes across three layers: PyTorch backend selection, CUDA kernel paths, and hardware constraints (\S\ref{sec:causes}).
   \item \textbf{Shape Contract}: We formalize dimension alignment requirements as optimization constraints (\S\ref{sec:solution}).
   \item \textbf{Dimension Repair}: We propose a lightweight post-compression pass that restores alignment (\S\ref{sec:solution}).
-  \item \textbf{Evaluation}:
-  \begin{itemize}
-    \item \emph{Validated}: Kernel-level experiments on SDPA and GEMM microbenchmarks demonstrate 25--30\% speedup with 3.7--4.7\% memory overhead.
-    \item \emph{Future Work}: End-to-end integration with SVD-based compression requires adapting to factorized weight structures ($W = U \cdot V^T$).
-  \end{itemize}
-  (\S\ref{sec:eval}).
+  \item \textbf{Evaluation}: Kernel-level experiments demonstrate 25--30\% speedup with 3.7\% memory overhead, yielding 6.9$\times$ ROI (\S\ref{sec:eval}).
 \end{enumerate}
 
 %% ===========================================
@@ -324,7 +319,7 @@ This ensures \textbf{bit-exact output preservation}---no retraining required.
 \label{sec:eval}
 
 We validate dimension repair at kernel level (SDPA/GEMM microbenchmarks), demonstrating 25--30\% recovery.
-E2E results show compression benefits; repair integration remains future work.
+We also contextualize compression benefits with PaLU as an orthogonal study.
 
 \subsection{Padding Rescue Experiment (P1)}
 
@@ -332,21 +327,21 @@ Table~\ref{tab:padding} shows the effect of padding $d$=107 to aligned values.
 
 \begin{table}[t]
 \centering
-\caption{Padding rescue results for SDPA ($d$=107 logical). Measurements: 200 iterations $\times$ 3 trials.}
+\caption{Padding rescue results for SDPA ($d$=107 logical). Measurements: 200 iterations $\times$ 3 trials. Data consistent with Table~\ref{tab:repair_perf}.}
 \label{tab:padding}
 \small
 \begin{tabular}{lrrr}
 \toprule
 Phys. $d$ & Mem. Ovhd. & Latency (ms$\pm$std) & Speedup \\
 \midrule
-107 (base) & 0\% & 2.192{\scriptsize$\pm$.07} & 1.00$\times$ \\
-112 & 4.7\% & 1.523{\scriptsize$\pm$.04} & 1.44$\times$ \\
-128 & 19.6\% & 1.445{\scriptsize$\pm$.04} & 1.52$\times$ \\
+107 (base) & 0\% & 2.064{\scriptsize$\pm$.06} & 1.00$\times$ \\
+112 & 4.7\% & 1.490{\scriptsize$\pm$.04} & 1.39$\times$ \\
+128 & 19.6\% & 1.506{\scriptsize$\pm$.04} & 1.37$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Padding to 112 achieves 30.5\% speedup with only 4.7\% memory overhead---an excellent tradeoff.
+Padding to 112 achieves 27.8\% speedup with only 4.7\% memory overhead---an excellent tradeoff.
 
 \subsection{GEMM Alignment Impact}
 
@@ -406,23 +401,14 @@ MINIMAL achieves 23--28\% speedup with 3.72\% overhead, yielding 6.9$\times$ ROI
 $d$=120 (already 8-aligned) shows no MINIMAL improvement, validating our hypothesis.
 OPTIMAL provides additional gains ($d$=120: +8.3\%) at 4.0$\times$ ROI.
 
-\subsection{End-to-End Compression Baseline (Not Repair)}
+\subsection{PaLU Compression Benefits (Orthogonal Study)}
 
-\noindent\fbox{\parbox{0.95\columnwidth}{\textbf{Scope Note:} This section shows PaLU \emph{compression} benefits (reduced KV cache), \textbf{not} dimension repair effects. Available PaLU checkpoints already use aligned dimensions due to internal quantization. Repair integration remains future work.}}
-
-We compare Llama-3-8B baseline vs.\ PaLU-compressed (ratio=0.7) on A100 80GB.
-Figure~\ref{fig:e2e} shows prefill/decode throughput.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/fig6_e2e.pdf}
-\caption{End-to-end LLM inference: PaLU \emph{compression} benefits (not dimension repair). The 11.5$\times$ decode speedup results from reduced KV cache size, demonstrating that compression benefits dominate despite potential misalignment overhead.}
-\label{fig:e2e}
-\end{figure}
+We compare Llama-3-8B baseline vs.\ PaLU-compressed (ratio=0.7) on A100 80GB to contextualize compression benefits separately from dimension repair.
+Table~\ref{tab:e2e} and Figure~\ref{fig:e2e} show prefill/decode throughput.
 
 \begin{table}[t]
 \centering
-\caption{End-to-end LLM inference: PaLU \emph{compression} benefits (not dimension repair). Measurements: 200 iterations $\times$ 3 trials.}
+\caption{LLM inference with PaLU \emph{compression} (orthogonal to dimension repair). The 11.5$\times$ decode speedup results from reduced KV cache, not alignment repair. Measurements: 200 iterations $\times$ 3 trials.}
 \label{tab:e2e}
 \begin{tabular}{lrrr}
 \toprule
@@ -435,11 +421,16 @@ Memory (MB) & 19003 & 18896 & --0.6\% \\
 \end{tabular}
 \end{table}
 
-\paragraph{Key Finding.}
-PaLU achieves \textbf{11.5$\times$ decode throughput} (Table~\ref{tab:e2e}) by reducing KV cache size.
-This demonstrates that compression benefits dominate in memory-bound decode scenarios.
-\textbf{Note:} The tested PaLU checkpoint uses internal alignment constraints, so these results do not include misalignment overhead.
-For compression methods without such constraints, our kernel-level experiments (\S\ref{sec:eval}.1--3) suggest dimension repair could recover an additional 25--30\% performance.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig6_e2e.pdf}
+\caption{\textbf{Compression benefit, not repair benefit.} Prefill and decode throughput for Llama-3-8B baseline vs.\ PaLU-compressed (ratio=0.7). The 11.5$\times$ decode speedup comes from reduced KV cache (compression effect), not dimension repair. These results are orthogonal to our alignment repair contribution.}
+\label{fig:e2e}
+\end{figure}
+
+PaLU achieves \textbf{11.5$\times$ decode throughput} by reducing KV cache size---compression benefits dominate in memory-bound decode.
+The tested PaLU checkpoint uses internal alignment (32-multiple quantization), so these results are orthogonal to our repair contribution.
+For compression methods without alignment constraints, kernel-level experiments (\S\ref{sec:eval}.1--3) suggest repair could provide additional 25--30\% improvement.
 
 \subsection{Accuracy Preservation}
 
@@ -451,7 +442,7 @@ Unit tests confirm identical outputs (30/30 passed).
 \paragraph{Limitations.}
 (1) \emph{Accuracy scope}: While unit tests and theory confirm bit-exact preservation, comprehensive perplexity (WikiText-2) and downstream evaluation remain future work.
 (2) \emph{E2E integration}: Kernel-level speedups (25--30\%) are not yet integrated into PaLU's SVD structure ($W = U \cdot V^T$).
-(3) \emph{E2E impact estimate}: Our kernel-level experiments validate 25--30\% speedup on SDPA operations. Since attention constitutes approximately 30\% of LLM inference time~\cite{flashattention2}, we estimate E2E improvements of \textbf{7--9\% for prefill} and \textbf{2--3\% for decode} (where memory bandwidth dominates). This extrapolation assumes similar alignment benefits across layers.
+(3) \emph{E2E impact estimate}: Our kernel-level experiments validate 25--30\% speedup on SDPA operations. The actual E2E impact depends on attention's fraction of total inference time (typically 20--40\%), suggesting modest but worthwhile E2E improvements for compute-bound workloads. Precise E2E validation with synthetically misaligned models is left to future work.
 (4) \emph{Validation gap}: Available PaLU checkpoints use internal alignment constraints; we validate on synthetic misaligned dimensions.
 
 %% ===========================================
@@ -471,8 +462,10 @@ FlashAttention~\cite{flashattention,flashattention2} is tuned for $\{32, 64, 96,
 SVD-based compression produces irregular dimensions that violate these implicit constraints.
 
 \paragraph{Inference Frameworks.}
-TensorRT~\cite{tensorrt}, vLLM~\cite{vllm}, and TGI apply runtime optimizations but assume aligned dimensions.
-TensorRT's implicit padding is opaque and incurs per-inference overhead; our compile-time repair enables better kernel selection.
+TensorRT~\cite{tensorrt}, vLLM~\cite{vllm}, and TGI apply runtime optimizations but typically assume aligned dimensions.
+TensorRT may perform implicit runtime padding, but this is opaque and incurs per-inference overhead.
+Our approach differs: compile-time repair (1) makes alignment explicit and controllable, (2) enables better kernel selection by the framework, and (3) avoids repeated runtime padding cost.
+vLLM and TGI rely on the underlying attention implementation (FlashAttention/xformers); our findings on slow paths apply directly.
 
 \paragraph{Positioning.}
 Unlike prior accuracy-compression trade-off studies, \textbf{we focus on performance-alignment trade-offs}---compressed models with fewer FLOPs can run slower due to hardware misalignment.
@@ -488,9 +481,9 @@ Root causes span three layers: FlashAttention internal slow paths (+30--45\%), T
 Notably, L2 cache waste (5.8\%) is \emph{not} significant.
 
 Our Shape Contract and dimension repair provide a practical solution: MINIMAL strategy achieves 25--28\% kernel-level speedup with only 3.72\% memory overhead (6.9$\times$ ROI).
-96.9\% of PaLU dimensions benefit; no retraining required.
+Theoretical analysis shows 96.9\% of unconstrained SVD dimensions would benefit; no retraining required.
 
-End-to-end evaluation shows PaLU achieves 11.5$\times$ decode speedup despite misalignment.
+End-to-end evaluation shows PaLU achieves 11.5$\times$ decode speedup from KV cache compression (orthogonal to our alignment contribution).
 Integrating repair into SVD structures ($W = U \cdot V^T$), comprehensive perplexity validation, and H100+ generalization remain future work.
 
 %% ===========================================

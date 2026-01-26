@@ -1,0 +1,45 @@
+# Literature Search Results
+# 由 Literature Agent 维护
+
+# 搜索历史
+searches: []
+
+# 需要引用的论文
+papers_to_cite:
+  - title: "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness"
+    authors: "Tri Dao et al."
+    venue: "NeurIPS 2022"
+    relevance: "Core attention optimization, our baseline"
+    cited: true
+
+  - title: "FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning"
+    authors: "Tri Dao"
+    venue: "ICLR 2024"
+    relevance: "Improved version, head_dim requirements"
+    cited: true
+
+# 竞争方法对比数据
+competitive_methods: []
+
+# 技术文档引用
+technical_references:
+  - source: "NVIDIA CUDA C++ Programming Guide"
+    url: "https://docs.nvidia.com/cuda/cuda-c-programming-guide/"
+    topic: "Tensor Core alignment requirements"
+    key_info: "mma.m16n8k16 requires specific alignment"
+
+  - source: "PyTorch SDPA Documentation"
+    url: "https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html"
+    topic: "Backend selection logic"
+    key_info: "Flash, Memory-efficient, Math backends"
+
+# 待调研的问题
+pending_questions:
+  - question: "vLLM 如何处理不规则维度？"
+    status: "pending"
+
+  - question: "TensorRT-LLM 的 padding 策略是什么？"
+    status: "pending"
+
+# 最后更新时间
+last_updated: "2026-01-26"

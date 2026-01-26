@@ -376,12 +376,33 @@ C5_validation:
 
 c5_status_summary:
   date: "2026-01-26"
-  status: "BLOCKED - FUNDAMENTAL ISSUE"
-  blocker: |
+  status: "UNBLOCKED - USE RAP SVD"
+  previous_blocker: |
     所有可用的 PaLU checkpoint（ratio 0.5-0.9）都使用了 32-倍数量化约束，
     维度 100% 对齐。维度坍塌问题不存在于当前可用模型中。
+  solution_found: "2026-01-26"
+  solution: |
+    **发现 RAP SVD 方案不强制对齐！**
+
+    对比三种压缩方案的对齐逻辑：
+    - PaLU: `rounding_search_result(config, block_size=32)` → 强制 32 对齐
+    - RAP SVD: `round(head_dim * retain_ratio)` → 任意整数，无对齐约束
+    - RAP: 只要求偶数（RoPE pair 需要）
+
+    代码位置：
+    - PaLU 对齐: third_party/palu/palu/rank_search.py:11-17, block_size=32
+    - RAP SVD 无对齐: third_party/RAP/prune.py:775
+
+    示例：retain_ratio=0.8, head_dim=128
+    - RAP SVD: round(128 * 0.8) = 102 ← 不是 8 的倍数！
+    - PaLU: round(102 / 32) * 32 = 96 ← 强制对齐
   validated: false
-  next_action: "采用文字修改方案，弱化 E2E 验证主张"
+  next_action: |
+    1. 使用 RAP SVD 压缩模型生成不对齐维度
+       python third_party/RAP/prune.py --attention svd --model llama --retain-ratio 0.8
+    2. 验证生成的模型 rank 确实不对齐
+    3. 运行 dimension repair 并测量 speedup
+    4. 更新论文 Figure 6 展示 repair 效果
 
   # 2026-01-26 第三轮分析 - 最终确认
   detailed_analysis_v3:
