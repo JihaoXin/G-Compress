@@ -19,6 +19,50 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题（"维�
 - **格式**：SIGPLAN 双栏，10pt 字体
 - **长度**：6 pages（不含引用和附录）
 - **模板**：使用 acmart sigplan 模板
+- **匿名**：否（不匿名）
+
+### 作者信息（必须使用）
+
+```latex
+\author{Jihao Xin}
+\affiliation{\institution{KAUST}\city{Thuwal}\country{Saudi Arabia}}
+\email{jihao.xin@kaust.edu.sa}
+
+\author{Tian Lvy}
+\affiliation{\institution{KAUST}\city{Thuwal}\country{Saudi Arabia}}
+
+\author{Qilong Pan}
+\affiliation{\institution{HUMAIN AI}\city{Riyadh}\country{Saudi Arabia}}
+
+\author{Kesen Wang}
+\affiliation{\institution{HUMAIN AI}\city{Riyadh}\country{Saudi Arabia}}
+```
+
+### 图表方案（6 图，参考 paper_example 标准）
+
+| Fig | 名称 | 类型 | 用途 | 数据来源 |
+|-----|------|------|------|----------|
+| 1 | Overview | 架构图 | 展示问题全貌 | conceptual |
+| 2 | SDPA Latency | 散点图 | 阶梯效应 | results/S1 |
+| 3 | PaLU Distribution | 直方图 | 96.9% misaligned | results/palu_dim_dist |
+| 4 | Root Cause | 水平柱状图 | 4 假设 impact | results/C23 |
+| 5 | Repair Tradeoff | 柱状图 | speedup vs overhead | results/C4 |
+| 6 | E2E Performance | 分组柱状图 | Baseline vs PaLU | results/C5 |
+
+**图表生成命令**:
+```bash
+python scripts/create_paper_figures.py
+```
+
+### 质量要求
+
+- **配图要丰富、紧凑、不冗余**
+- **文章结构要清晰，有理有据**
+- **配图要 fancy，不低于 paper_example 中的论文水平**
+- **每个论点都要有数据支持**
+- **图表要自解释 (self-explanatory)**
+- **使用 error bar 展示统计显著性**
+- **精简表格数量（2-4 个），主要用图**
 
 ## 论文结构
 
@@ -124,6 +168,42 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题（"维�
    - 增加信息密度
    - 使用合适的图表类型（折线图、柱状图、热力图等）
 5. **验证编译**：确保修改后 LaTeX 能正确编译
+
+### 整合新实验结果（关键！）
+
+当有新实验完成时（检查 `results/` 目录），必须：
+
+1. **找到新结果**:
+   ```bash
+   ls -lt results/  # 找最新的实验目录
+   cat results/<exp>/<timestamp>/summary.json  # 读取关键数据
+   ```
+
+2. **整合到论文**:
+   - 在相关 section 添加新数据
+   - 更新表格数字
+   - 引用新图表 `\ref{fig:xxx}`
+
+3. **Perplexity 结果整合示例** (M2):
+   如果 `results/llm/` 下有新的 perplexity 数据，在 Section 6.5 Accuracy Preservation 添加：
+   ```latex
+   \paragraph{Perplexity Validation.}
+   We validated accuracy preservation by measuring WikiText-2 perplexity
+   before and after dimension repair on Llama-3-8B.
+   Results show identical perplexity (X.XX vs X.XX), confirming
+   that zero-padding does not affect model accuracy.
+   ```
+
+4. **新图表整合**:
+   如果 `Latex/figures/` 下有新图，添加 figure 环境：
+   ```latex
+   \begin{figure}[t]
+   \centering
+   \includegraphics[width=\columnwidth]{figures/fig_new.pdf}
+   \caption{New figure caption.}
+   \label{fig:new}
+   \end{figure}
+   ```
 
 ### 常见改进方向
 

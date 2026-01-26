@@ -56,17 +56,74 @@ echo "Job completed at $(date)"
 3. **统计显著**：warmup >= 10, measure >= 100, trials >= 3
 4. **记录环境**：GPU 型号、驱动版本、PyTorch 版本
 
-## 可用的基准测试代码
+## 可用的实验工具（完整列表）
 
-- `src/benchmark_gemm.py`：GEMM 基准测试
-- `src/benchmark_sdpa.py`：SDPA 基准测试
-- `scripts/run_benchmarks.py`：主入口
-
-示例命令：
+### 1. 低级基准测试
 ```bash
+# GEMM 基准测试（测试矩阵乘法对齐）
 python -m scripts.run_benchmarks --experiment gemm_projection --dtype float16
+
+# SDPA 基准测试（测试注意力后端选择）
 python -m scripts.run_benchmarks --experiment sdpa_backend
 ```
+
+### 2. LLM 推理基准（Llama-3-8B）
+```bash
+# Baseline vs PaLU 推理延迟（需要 80GB A100）
+python -m src.gcompress_bench.llm_run --variant baseline --suite infer_sweep --out results/llm
+python -m src.gcompress_bench.llm_run --variant palu --suite infer_sweep --out results/llm
+```
+
+### 3. Perplexity 评估（M2 要求的实验）
+```bash
+# WikiText-2 perplexity 测量
+python -m src.gcompress_bench.llm_eval --variant baseline --suite ppl --out results/llm
+
+# 下游任务评估 (lm-eval harness)
+python -m src.gcompress_bench.llm_eval --variant baseline --suite lmeval --tasks piqa,hellaswag --limit 200 --out results/llm
+```
+
+### 4. Dimension Repair 验证
+```python
+# 在 Python 脚本中使用
+from src.gcompress_bench.dimension_repair import DimensionRepairer, repair_dimension
+
+# 分析模型维度
+repairer = DimensionRepairer(strategy="minimal")
+plan = repairer.compute_repair_plan(model)
+
+# 应用修复并测量 perplexity 差异
+repaired_model, result = repairer.repair_model(model)
+```
+
+### 5. 图表生成
+```bash
+# 从实验结果生成论文图表
+python -m scripts.plot_results results/<experiment>/<timestamp>/
+
+# 生成 LLM 结果图表
+python -m scripts.plot_llm_results results/llm/
+
+# 重新生成所有论文图表
+python scripts/create_paper_figures.py
+```
+
+### 6. 实验规格（Night Sweep）
+```bash
+# 查看预定义实验配置
+cat experiments/night_sweep.yaml
+
+# 运行预定义实验
+python -m scripts.run_experiment run --spec experiments/night_sweep.yaml --name S1_sdpa_dense_sweep
+```
+
+## 实验结果 → 论文图表 流程
+
+**重要**: 每次新实验完成后，必须：
+1. 检查结果文件: `ls results/<experiment>/`
+2. 生成图表: `python -m scripts.plot_results results/<experiment>/<timestamp>/`
+3. 复制到论文目录: `cp results/<experiment>/<timestamp>/plots/*.pdf Latex/figures/`
+4. 更新 findings.yaml 记录新发现
 
 ## 工作流程
 
