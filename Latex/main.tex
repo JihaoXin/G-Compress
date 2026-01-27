@@ -41,7 +41,7 @@
 }
 \email{jihao.xin@kaust.edu.sa}
 
-\author{Tian Lv}
+\author{Tian Lvy}
 \affiliation{
   \institution{KAUST}
   \city{Thuwal}
@@ -117,7 +117,7 @@ On an NVIDIA A100, this causes:
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig1_overview.pdf}
-\caption{Dimensional collapse in compressed LLMs. Post-training compression produces irregular head dimensions (e.g., $d$=107) that cause \textbf{88\% latency increase} vs.\ aligned dimensions. Dimension repair (padding to $d$=112) recovers \textbf{30\% performance} with only 4.7\% memory overhead.}
+\caption{\textbf{Dimensional collapse overview.} (a)~SVD compression produces irregular dimensions (e.g., $d$=107) causing \textbf{+88\% latency} due to GPU alignment violations. (b)~Dimension repair pads to aligned values, recovering \textbf{30\% performance} with only 4.7\% memory overhead.}
 \label{fig:overview}
 \end{figure}
 
@@ -184,7 +184,7 @@ All 24 available PaLU checkpoints use 32-multiple alignment. Our findings apply 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig3_palu_dist.pdf}
-\caption{\textbf{THEORETICAL (Unconstrained SVD)} dimension distribution from Fisher-information-based rank allocation (Llama-3-8B, $r$=0.8). 96.9\% of 512 KV head dimensions would be misaligned if compression used mathematically optimal ranks \emph{without alignment constraints}. \textbf{Production PaLU checkpoints enforce 32-multiple alignment}; this figure represents the \emph{motivation} for methods that may relax such constraints.}
+\caption{\textbf{[Theoretical Analysis]} Dimension distribution from \emph{unconstrained} Fisher-information-based rank allocation (Llama-3-8B, $r$=0.8). If compression used mathematically optimal ranks without alignment constraints, 96.9\% of 512 KV head dimensions would be misaligned. \textbf{Note:} All production PaLU checkpoints enforce 32-multiple alignment (\S\ref{sec:scope}); this figure motivates studying methods that relax such constraints.}
 \label{fig:palu_dist}
 \end{figure}
 
@@ -196,7 +196,7 @@ Figure~\ref{fig:sdpa_latency} shows the results.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig2_sdpa_latency.pdf}
-\caption{SDPA latency across head dimensions. Shaded regions show $\pm$1 std over 3 trials $\times$ 200 iterations per trial. Clear alignment cliffs (``staircase effect'') visible at non-8-aligned values. $d$=107 shows 88\% increase vs $d$=96.}
+\caption{SDPA latency across head dimensions (Y-axis starts at 0.6ms to emphasize relative differences). Shaded regions show $\pm$1 std over 3 trials $\times$ 200 iterations. Clear alignment cliffs (``staircase effect'') visible at non-8-aligned values. $d$=107 shows 88\% increase vs $d$=96.}
 \label{fig:sdpa_latency}
 \end{figure}
 
@@ -208,7 +208,7 @@ Table~\ref{tab:backend} shows latency across different SDPA backends.
 
 \begin{table}[t]
 \centering
-\caption{SDPA backend latency (ms$\pm$std) for various head dimensions. Measurements: 200 iterations $\times$ 3 trials.}
+\caption{SDPA backend latency (ms$\pm$std) for various head dimensions. Measurements: 200 iterations $\times$ 3 trials. Note: 5--8\% run-to-run variance expected (\S\ref{sec:phenomenon}).}
 \label{tab:backend}
 \begin{tabular}{lrrrr}
 \toprule
@@ -357,7 +357,7 @@ Figure~\ref{fig:repair_tradeoff} visualizes the speedup vs. memory overhead trad
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig5_repair_tradeoff.pdf}
-\caption{Speedup vs.\ memory overhead tradeoff for dimension repair. Points labeled with original dimensions; $d$=120 (already 8-aligned) shows 0\% MINIMAL speedup, validating alignment hypothesis. MINIMAL achieves 6.9$\times$ ROI; OPTIMAL provides 4.0$\times$ ROI.}
+\caption{Speedup vs.\ memory overhead tradeoff for dimension repair. $d$=120 (already 8-aligned, highlighted) shows 0\% MINIMAL speedup, validating that alignment---not padding---drives performance gains. MINIMAL achieves 6.9$\times$ ROI (speedup/overhead); OPTIMAL provides 4.0$\times$ ROI.}
 \label{fig:repair_tradeoff}
 \end{figure}
 
@@ -366,7 +366,7 @@ Memory overhead: MINIMAL 3.72\%, OPTIMAL 7.20\%.
 
 \begin{table}[t]
 \centering
-\caption{SDPA latency (ms$\pm$std) before and after dimension repair ($B$=4, $S$=2048, $H$=32). Run-to-run variance ($\sim$6\%) vs.\ Table~\ref{tab:padding} is within normal GPU measurement variability (see~\S\ref{sec:phenomenon}.1).}
+\caption{SDPA latency (ms$\pm$std) before and after dimension repair ($B$=4, $S$=2048, $H$=32). Data from independent run vs.\ Tables~\ref{tab:backend}/\ref{tab:padding}; $\sim$6\% variance is within normal GPU measurement variability (\S\ref{sec:phenomenon}).}
 \label{tab:repair_perf}
 \begin{tabular}{lrrrrr}
 \toprule
@@ -423,9 +423,15 @@ WikiText-2 perplexity validation on RAP SVD ($r$=0.8, $d$=102, 100\% misaligned)
 \subsection{Limitations}
 \label{sec:limitations}
 
-\textbf{(1) E2E integration}: Kernel-level speedups (25--30\%) not yet integrated into PaLU's $W = U \cdot V^T$ structure.
-\textbf{(2) Scope}: The 96.9\% figure is theoretical; production PaLU uses alignment constraints. RAP SVD validated as real-world misaligned example.
-\textbf{(3) Downstream}: Perplexity validated; comprehensive task evaluation is future work.
+\textbf{(1) E2E integration gap}: Our kernel-level experiments (C4) demonstrate 25--30\% speedup for misaligned dimensions.
+However, integrating repair into PaLU's factorized $W = U \cdot V^T$ structure requires adapting padding to the low-rank matrices---straightforward but not yet implemented.
+Our RAP SVD validation produced $d$=102 (100\% misaligned), but the compression itself degraded perplexity significantly (11.08$\to$92.39), limiting its deployment value.
+The kernel-level microbenchmarks remain our primary evidence; E2E integration with production-quality compressed models is future work.
+
+\textbf{(2) Scope}: The 96.9\% figure is from theoretical Fisher-information analysis; all 24 production PaLU checkpoints enforce 32-multiple alignment.
+Our findings apply to methods without alignment constraints (vanilla SVD, RAP SVD) or future methods that relax constraints for better compression.
+
+\textbf{(3) Downstream}: Zero-padding preserves outputs exactly; perplexity validated on RAP SVD. Comprehensive task evaluation (MMLU, etc.) is future work.
 
 %% ===========================================
 %% 7. RELATED WORK
@@ -448,6 +454,32 @@ TensorRT~\cite{tensorrt}, vLLM~\cite{vllm}, and TGI apply runtime optimizations 
 TensorRT may perform implicit runtime padding, but this is opaque and incurs per-inference overhead.
 Our approach differs: compile-time repair (1) makes alignment explicit and controllable, (2) enables better kernel selection by the framework, and (3) avoids repeated runtime padding cost.
 vLLM and TGI rely on the underlying attention implementation (FlashAttention/xformers); our findings on slow paths apply directly.
+
+\paragraph{Dimension Handling Comparison.}
+Table~\ref{tab:dim_handling} summarizes how different systems handle head dimensions.
+Our compile-time repair makes alignment explicit and avoids runtime overhead.
+
+\begin{table}[t]
+\centering
+\caption{Head dimension handling across systems. Supported values shown; others may cause fallback or failure.}
+\label{tab:dim_handling}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+System & Supported \texttt{head\_dim} & Misaligned handling \\
+\midrule
+FlashAttn-2 & Optimized: 32,64,96,128,256 & Slow path (+30--45\%) \\
+vLLM & 64,80,96,112,128,256 & Error/fallback \\
+TensorRT & 32,40,64,80,96,104,128... & Runtime padding \\
+\midrule
+GPTQ/AWQ & Preserves original dims & N/A (no change) \\
+PaLU & 32-multiple (enforced) & N/A (aligned) \\
+RAP SVD & Any integer & \textbf{Vulnerable} \\
+\midrule
+\textbf{This work} & Repair to 8/16-multiple & Compile-time fix \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Positioning.}
 Unlike prior accuracy-compression trade-off studies, \textbf{we focus on performance-alignment trade-offs}---compressed models with fewer FLOPs can run slower due to hardware misalignment.
