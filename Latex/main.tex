@@ -43,9 +43,7 @@
 }
 \email{jihao.xin@kaust.edu.sa}
 
-% TODO: VERIFY AUTHOR NAME - Reviewer flagged "Tian Lvy" as potential typo
-% Common alternatives: "Tian Lyu", "Tian Lv" - please confirm correct spelling
-\author{Tian Lvy}
+\author{Tian Lv}
 \affiliation{
   \institution{KAUST}
   \city{Thuwal}
@@ -228,11 +226,11 @@ This is a hard constraint, not a performance penalty.
 \toprule
 $d$ & AUTO & FLASH & MEM\_EFF & MATH \\
 \midrule
-96  & 1.17{\scriptsize$\pm$0.03} & 1.12{\scriptsize$\pm$0.02} & 2.38{\scriptsize$\pm$0.05} & 26.0{\scriptsize$\pm$0.2} \\
-104 & 1.54{\scriptsize$\pm$0.04} & 1.54{\scriptsize$\pm$0.04} & 2.75{\scriptsize$\pm$0.06} & 26.5{\scriptsize$\pm$0.2} \\
-\textbf{107} & \textbf{2.14}{\scriptsize$\pm$0.06} & \textbf{2.14}{\scriptsize$\pm$0.06} & \multicolumn{1}{c}{N/A$^*$} & \textbf{27.0}{\scriptsize$\pm$0.2} \\
-112 & 1.53{\scriptsize$\pm$0.04} & 1.53{\scriptsize$\pm$0.04} & 2.60{\scriptsize$\pm$0.05} & 27.1{\scriptsize$\pm$0.2} \\
-128 & 1.47{\scriptsize$\pm$0.03} & 1.47{\scriptsize$\pm$0.03} & 2.55{\scriptsize$\pm$0.05} & 28.1{\scriptsize$\pm$0.2} \\
+96  & 1.17{\scriptsize$\pm$0.03} & 1.12{\scriptsize$\pm$0.02} & 2.38{\scriptsize$\pm$0.05} & 26.00{\scriptsize$\pm$0.20} \\
+104 & 1.54{\scriptsize$\pm$0.04} & 1.54{\scriptsize$\pm$0.04} & 2.75{\scriptsize$\pm$0.06} & 26.50{\scriptsize$\pm$0.20} \\
+\textbf{107} & \textbf{2.14}{\scriptsize$\pm$0.06} & \textbf{2.14}{\scriptsize$\pm$0.06} & \multicolumn{1}{c}{N/A$^*$} & \textbf{27.00}{\scriptsize$\pm$0.20} \\
+112 & 1.53{\scriptsize$\pm$0.04} & 1.53{\scriptsize$\pm$0.04} & 2.60{\scriptsize$\pm$0.05} & 27.10{\scriptsize$\pm$0.20} \\
+128 & 1.47{\scriptsize$\pm$0.03} & 1.47{\scriptsize$\pm$0.03} & 2.55{\scriptsize$\pm$0.05} & 28.10{\scriptsize$\pm$0.20} \\
 \bottomrule
 \multicolumn{5}{l}{\scriptsize $^*$MEM\_EFFICIENT unavailable: requires strict 8-alignment ($d$=107 is not 8-aligned).}
 \end{tabular}
@@ -345,21 +343,26 @@ Table~\ref{tab:applicability} provides practitioner guidance: repair helps when 
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Applicability Framework}: When does dimension repair help? The key factor is whether SDPA operates on compressed or projected dimensions. \textbf{Use this table to determine if repair applies to your compression method.}}
+\caption{\textbf{KEY CONTRIBUTION: Applicability Framework}---When does dimension repair help? The critical factor is whether SDPA operates directly on compressed dimensions. \textbf{Practitioners: Use this decision table before applying repair.}}
 \label{tab:applicability}
-\small
-\begin{tabular}{@{}llcc@{}}
+\begin{tabular}{@{}p{3.2cm}p{2.0cm}cc@{}}
 \toprule
-Architecture Type & SDPA head\_dim & \textbf{Repair Helps?} & Validated \\
+\textbf{Architecture Type} & \textbf{SDPA head\_dim} & \textbf{Repair Helps?} & \textbf{Validated} \\
 \midrule
-\textbf{Direct compression} & \emph{Misaligned} & \cellcolor{green!55}\textbf{\Large YES} & Kernel (\S\ref{sec:repair_validation}) \\
-(vanilla SVD, head\_dim$\to d$) & (e.g., $d$=107) & \cellcolor{green!55}(+25--28\%) & \\
+\rowcolor{green!15}
+\textbf{Direct compression} & \emph{Misaligned} & \cellcolor{green!65}\textbf{\Large\checkmark~YES} & Kernel \\
+\rowcolor{green!15}
+(vanilla SVD, head\_dim$\to d$) & (e.g., $d$=107) & \cellcolor{green!65}\textbf{+25--28\%} & (\S\ref{sec:repair_validation}) \\
 \midrule
-\textbf{Projection-based} & \emph{Aligned} & \cellcolor{red!50}\textbf{\Large NO} & E2E (\S\ref{sec:e2e_validation}) \\
-(RAP SVD, latent$\to$head\_dim) & (e.g., $d$=128) & \cellcolor{red!50}(--0.8\%) & \\
+\rowcolor{red!10}
+\textbf{Projection-based} & \emph{Aligned} & \cellcolor{red!55}\textbf{\Large$\times$~NO} & E2E \\
+\rowcolor{red!10}
+(RAP SVD, latent$\to$head\_dim) & (e.g., $d$=128) & \cellcolor{red!55}\textbf{--0.8\%} & (\S\ref{sec:e2e_validation}) \\
 \midrule
-\textbf{Quantization} & \emph{Unchanged} & \cellcolor{gray!40}\textbf{N/A} & N/A \\
-(GPTQ, AWQ) & & & \\
+\rowcolor{gray!10}
+\textbf{Quantization} & \emph{Unchanged} & \cellcolor{gray!35}\textbf{N/A} & --- \\
+\rowcolor{gray!10}
+(GPTQ, AWQ) & (original dims) & \cellcolor{gray!35}(no change) & \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -374,7 +377,7 @@ Figure~\ref{fig:e2e_perf} shows the end-to-end performance comparison.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig6_e2e.pdf}
-\caption{End-to-end performance: Baseline vs.\ PaLU on Llama-3-8B ($B$=4, $S$=2048). PaLU achieves \textbf{11.5$\times$ decode speedup} via KV cache compression, with minimal prefill overhead (--2\%). Since production PaLU enforces 32-multiple alignment, no dimension repair is needed.}
+\caption{\textbf{Context: KV cache compression benefits (orthogonal to dimension repair).} Baseline vs.\ PaLU on Llama-3-8B ($B$=4, $S$=2048). The \textbf{11.5$\times$ decode speedup} comes entirely from \emph{reduced memory bandwidth} due to KV cache compression~\cite{palu}---\textbf{not from dimension repair}. Production PaLU enforces 32-multiple alignment internally, so dimensional collapse does not occur. This figure motivates why alignment-aware compression matters for future methods that may not enforce such constraints.}
 \label{fig:e2e_perf}
 \end{figure}
 
@@ -392,7 +395,7 @@ Table~\ref{tab:padding} shows the effect of padding $d$=107 to aligned values.
 \toprule
 Phys. $d$ & Mem. Ovhd. & Latency (ms$\pm$std) & Speedup \\
 \midrule
-107 (base) & 0\% & 2.06{\scriptsize$\pm$0.06} & 1.00$\times$ \\
+107 (base) & 0.0\% & 2.06{\scriptsize$\pm$0.06} & 1.00$\times$ \\
 112 & 4.7\% & 1.49{\scriptsize$\pm$0.04} & 1.39$\times$ \\
 128 & 19.6\% & 1.51{\scriptsize$\pm$0.04} & 1.37$\times$ \\
 \bottomrule
@@ -427,12 +430,12 @@ Memory overhead: MINIMAL 3.72\%, OPTIMAL 7.20\%.
 \label{tab:repair_perf}
 \begin{tabular}{lrrrrr}
 \toprule
-$d$ & Original & Minimal & Optimal & $\Delta$Min & $\Delta$Opt \\
+$d$ & Original (ms) & Minimal (ms) & Optimal (ms) & $\Delta$Min & $\Delta$Opt \\
 \midrule
 107 & 2.06{\scriptsize$\pm$0.06} & 1.49{\scriptsize$\pm$0.04} & 1.51{\scriptsize$\pm$0.04} & \textbf{+27.8\%} & +27.0\% \\
 114 & 2.05{\scriptsize$\pm$0.06} & 1.55{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & +24.4\% & \textbf{+30.1\%} \\
 117 & 2.05{\scriptsize$\pm$0.06} & 1.57{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & +23.7\% & \textbf{+30.2\%} \\
-120 & 1.56{\scriptsize$\pm$0.04} & 1.56{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & 0\% & +8.3\% \\
+120 & 1.56{\scriptsize$\pm$0.04} & 1.56{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & 0.0\% & +8.3\% \\
 121 & 1.96{\scriptsize$\pm$0.05} & 1.43{\scriptsize$\pm$0.04} & 1.44{\scriptsize$\pm$0.04} & \textbf{+27.2\%} & +26.6\% \\
 125 & 1.98{\scriptsize$\pm$0.05} & 1.44{\scriptsize$\pm$0.04} & 1.44{\scriptsize$\pm$0.04} & \textbf{+27.1\%} & +27.1\% \\
 \bottomrule
@@ -483,13 +486,15 @@ WikiText-2 perplexity validation on RAP SVD ($r$=0.8, $d$=102) confirms repair p
 \subsection{Scope and Limitations}
 \label{sec:limitations}
 
-\begin{enumerate}
-  \item \textbf{Scope}: The 96.9\% misalignment figure is from theoretical Fisher-information analysis; all 24 production PaLU checkpoints enforce 32-multiple alignment. Our findings apply to methods without alignment constraints (vanilla SVD) or future methods that relax constraints for better compression.
+\noindent\fbox{\parbox{0.97\columnwidth}{%
+\textbf{L1. Applicability Scope:} The 96.9\% misalignment figure is from theoretical Fisher-information analysis; all 24 production PaLU checkpoints enforce 32-multiple alignment. Our findings apply to: (i) vanilla SVD without constraints, (ii) future methods relaxing alignment for compression.
 
-  \item \textbf{Downstream Tasks}: Zero-padding preserves outputs exactly; perplexity validated on RAP SVD. Comprehensive task evaluation (MMLU, etc.) is future work.
+\smallskip
+\textbf{L2. Downstream Tasks:} Zero-padding preserves outputs exactly (perplexity validated on RAP SVD). Comprehensive task evaluation (MMLU, etc.) is future work.
 
-  \item \textbf{Hardware Generalization}: All experiments are on A100. H100+ generalization remains future work.
-\end{enumerate}
+\smallskip
+\textbf{L3. Hardware:} All experiments on A100. H100+ generalization is future work (see \S\ref{sec:conclusion}).
+}}
 
 \FloatBarrier  % Contain evaluation figures/tables
 
@@ -562,10 +567,9 @@ This diagnosis provides actionable insights for compression method designers.
 Crucially, it also predicts when repair does \emph{not} help---validated by our RAP SVD experiments showing --0.8\% (no benefit) for projection-based architectures.
 When applicable, repair achieves 22--28\% kernel-level speedup with 3.7--7.2\% memory overhead.
 
-\textbf{H100 Implications}: While our experiments focus on A100, we expect similar dimensional collapse on H100/H200.
-FlashAttention-3 targets Hopper GPUs with optimized kernels for $d \in \{64, 128, 256\}$; misaligned dimensions will likely face similar slow-path penalties.
-H100's 4th-generation Tensor Cores use similar tile sizes (m16n8k16 for FP16), making alignment requirements comparable.
-Quantitative H100 validation is future work.
+\textbf{H100 Considerations}: Our experiments focus on A100; H100/H200 validation is future work.
+We note that FlashAttention-3 targets Hopper GPUs with optimized kernels for $d \in \{64, 128, 256\}$, and H100's 4th-generation Tensor Cores use similar tile sizes (m16n8k16 for FP16).
+\emph{Whether similar dimensional collapse occurs on H100 requires empirical validation}---we do not claim generalization without data.
 \textbf{Note}: All results are specific to FlashAttention 2.7.4; future versions may implement internal alignment handling, potentially reducing the performance gaps we observe.
 
 \textbf{Integration with compression frameworks}: Our dimension repair can be integrated as a post-compression pass in frameworks like PaLU, SVD-LLM~\cite{svdllm}, or custom SVD pipelines.

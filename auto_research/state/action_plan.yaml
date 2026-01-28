@@ -1,143 +1,194 @@
 bottleneck_analysis:
   bottleneck_score: 7.0
+  breakthrough_direction: 'Previous 100+ iterations exhausted WRITING_ONLY fixes.
+
+    The reviewer''s detailed visual observations reveal that figure code fixes
+
+    were NOT aggressive enough. Need to:
+
+    1. INCREASE font sizes SIGNIFICANTLY (not just to 8pt, but to 10-11pt)
+
+    2. SIMPLIFY Figure 1 more aggressively
+
+    3. ADJUST Figure 5/6 label positions with adjustText library
+
+    4. REDUCE Figure 5/6 widths to improve information density
+
+    '
   dimension_scores:
     innovation: 7.5
     paper_presentation: 7.0
     technical_quality: 7.5
     writing_quality: 7.5
   primary_bottleneck: Paper Presentation
-  reviewer_breakthrough_direction: 'Since Paper Presentation is the bottleneck (7.0
-    < 7.5), focus on visual improvements:
+  reviewer_explicit_guidance: 'The reviewer''s "Visual Observations" section (lines
+    250-430) provides EXTREMELY
 
-    - Increase all figure fonts to 8pt minimum
+    detailed, page-by-page feedback on figure quality issues that are still present.
 
-    - Simplify Figure 1 to reduce visual clutter
 
-    - Standardize table formatting
+    Key observations from reviewer:
 
-    - Make Table 3 more visually prominent
+    1. "坐标轴标签约为 7pt（打印边界）" - Figure 2 axis labels ~7pt, needs 8pt+
+
+    2. "数据点标签（d=107等）约 6-7pt" - Figure 6 labels too small
+
+    3. "视觉元素过多" - Figure 1 still too complex
+
+    4. "信息密度低" - Figures 5/6 have low information density
+
+
+    These are FIGURE_CODE_REQUIRED issues, not WRITING_ONLY!
 
     '
-created_at: '2026-01-28T11:00:00+08:00'
+created_at: '2026-01-28T12:00:00+08:00'
 execution_order:
-  phase_1_figure_fixes:
-    description: Fix figure font sizes and complexity
+  phase_1_figure_code:
+    description: Fix figure code issues - highest impact on Presentation score
     priority: critical
-    rationale: 'Paper Presentation is the bottleneck (7.0/10).
+    rationale: 'Previous iterations did WRITING_ONLY fixes with no improvement.
 
-      Figure fonts are the most concrete, verifiable fix.
+      The reviewer''s detailed visual observations show figure issues PERSIST.
+
+      Must fix the Python code to generate better figures.
 
       '
     tasks:
     - M1
     - M2
-    - M3
-  phase_2_latex_fixes:
-    description: Fix LaTeX formatting issues
+    - m1
+  phase_2_writing:
+    description: Fix writing/caption issues
     priority: high
-    rationale: 'Table and text formatting improvements.
-
-      Lower risk, complementary to figure fixes.
-
-      '
     tasks:
+    - M3
     - M4
-    - m-batch
-figure_tasks:
-- description: Fix hardcoded small fonts in figures
-  functions_to_check:
+    - m2
+    - m3
+    - m4
+  phase_3_polish:
+    description: Minor polish
+    priority: medium
+    tasks:
+    - m5
+    - m6
+    - m7
+figure_code_tasks:
+- command: python scripts/create_paper_figures.py
+  description: Increase all figure fonts to 11-12pt
+  functions:
   - fig2_sdpa_latency
   - fig5_repair_tradeoff
+  - fig6_e2e_performance
+  - rcParams
   id: M1
-  output_files:
-  - Latex/figures/fig2_sdpa_latency.pdf
-  - Latex/figures/fig5_repair_tradeoff.pdf
-  target_file: scripts/create_paper_figures.py
-- description: Simplify Figure 1 visual complexity
-  functions_to_check:
+  target_files:
+  - scripts/create_paper_figures.py
+- command: python scripts/create_paper_figures.py
+  description: Dramatically simplify Figure 1
+  functions:
   - fig1_overview
   id: M2
-  output_files:
-  - Latex/figures/fig1_overview.pdf
-  target_file: scripts/create_paper_figures.py
-- description: Make Figure 3 THEORETICAL ANALYSIS more prominent
-  functions_to_check:
-  - fig3_palu_distribution
-  id: M3
-  output_files:
-  - Latex/figures/fig3_palu_dist.pdf
-  target_file: scripts/create_paper_figures.py
+  target_files:
+  - scripts/create_paper_figures.py
+- command: python scripts/create_paper_figures.py
+  description: Fix Figure 5 label overlap with aggressive offsets
+  functions:
+  - fig5_repair_tradeoff
+  id: m1
+  target_files:
+  - scripts/create_paper_figures.py
 issues:
 - actions:
   - agent: writer
-    expected_output: All hardcoded fontsize values >= 10pt
+    expected_output: All font sizes increased to 11-12pt
     status: pending
     step: 1
     target_file: scripts/create_paper_figures.py
-    task: 'Read scripts/create_paper_figures.py and search for ALL hardcoded fontsize
-
-      values below 10pt. Focus on:
-
-      1. fig2_sdpa_latency() function - check ax.annotate(), ax.text() calls
-
-      2. fig5_repair_tradeoff() function - check scatter label fontsize
-
-      3. Any fontsize=8 or fontsize=9 values that might render smaller in PDF
+    task: 'Modify scripts/create_paper_figures.py to increase ALL font sizes:
 
 
-      Update any hardcoded small fonts to minimum 10pt (which renders as ~8pt in
+      In fig2_sdpa_latency():
 
-      the final PDF due to figure scaling).
+      - Line ~210: Change annotate fontsize from 9 to 11
+
+      - Line ~226: Change legend fontsize from 11 to 12
+
+
+      In fig5_repair_tradeoff():
+
+      - Line ~478-496: Change ALL annotate fontsize from 9-10 to 11-12
+
+      - Line ~510: Change ROI label fontsize from 9 to 10
+
+      - Line ~527-530: Change summary box fontsize from 9 to 10
+
+      - Line ~533: Change legend fontsize from 9 to 11
+
+
+      In fig6_e2e_performance():
+
+      - Line ~567: Change bar label fontsize from 9 to 11
+
+      - Line ~570-588: Change delta/speedup fontsize from 10-11 to 12
+
+      - Line ~592: Change bottom note fontsize from 9 to 10
+
+
+      Globally in rcParams:
+
+      - legend.fontsize: 10 -> 12
+
+      - xtick.labelsize: 10 -> 11
+
+      - ytick.labelsize: 10 -> 11
 
       '
   - agent: writer
-    command: python scripts/create_paper_figures.py
+    command: python scripts/create_paper_figures.py && ls -la Latex/figures/*.pdf
     depends_on:
     - 1
-    expected_output: Latex/figures/*.pdf files updated
+    expected_output: Figures regenerated with larger fonts
     status: pending
     step: 2
-    task: 'After updating the script, regenerate all figures:
+    task: 'Run the figure generation script to regenerate all figures:
 
       python scripts/create_paper_figures.py
 
 
-      Note: This script should run without GPU (it uses hardcoded data).
+      Then verify the figures were generated:
 
-      If it fails, check if matplotlib/numpy are available.
+      ls -la Latex/figures/*.pdf
 
       '
   - agent: writer
+    command: cd Latex && pdflatex main.tex && pdflatex main.tex
     depends_on:
     - 2
-    expected_output: Figures regenerated with larger fonts
+    expected_output: LaTeX compiles successfully
     status: pending
     step: 3
-    task: 'Verify the generated figures by checking file modification times:
+    task: 'Recompile LaTeX to verify figures display correctly:
 
-      ls -la Latex/figures/
-
-
-      If the figures are updated, recompile LaTeX to verify changes appear
-
-      in the final PDF.
+      cd Latex && pdflatex main.tex && pdflatex main.tex
 
       '
   depends_on: []
-  description: '**Reviewer Issue**: "Axis labels in Figure 2 and data labels in Figure
-    5
+  description: 'Reviewer observed:
 
-    appear to be approximately 6-7pt, which is below the 8pt minimum
+    - Figure 2 axis labels: ~7pt (line 289, 419)
 
-    recommended for print readability."
+    - Figure 5/6 data labels: ~6-7pt (line 327-329)
 
-
-    **Location**: Figure 2 (SDPA latency), Figure 5 (repair tradeoff)
+    - All below 8pt minimum for print readability
 
 
-    **Note**: The script already has global rcParams set to 10pt+, but specific
+    Previous fix attempt: Set rcParams to 10-11pt base
 
-    annotations or hardcoded fontsize values may override these defaults.
+    Why it failed: Individual elements (annotations, labels) still used 9pt
+
+
+    NEW APPROACH: Set ALL text elements to 11-12pt explicitly
 
     '
   id: M1
@@ -145,44 +196,82 @@ issues:
   max_inner_loops: 2
   priority: high
   status: completed
-  title: Figure Font Sizes Below 8pt Minimum
+  title: Figure 2/5/6 fonts below 8pt minimum
   type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: Simplified Figure 1 with fewer visual elements
+    expected_output: Figure 1 dramatically simplified
     status: pending
     step: 1
     target_file: scripts/create_paper_figures.py
     target_function: fig1_overview
-    task: "Review fig1_overview() in scripts/create_paper_figures.py:\n1. Count the\
-      \ number of visual elements (boxes, arrows, text labels)\n2. Identify elements\
-      \ that can be removed or simplified\n3. Consider:\n   - Reducing annotation\
-      \ density\n   - Using larger, bolder fonts for key numbers (88%, 30%)\n   -\
-      \ Removing secondary information (put in caption instead)\n\nMake targeted simplifications\
-      \ while preserving the core message:\n\"Compression causes dimensional collapse\
-      \ (88% slowdown),\nrepair recovers performance (30% speedup).\"\n"
+    task: 'Rewrite fig1_overview() in scripts/create_paper_figures.py:
+
+
+      CRITICAL: Make it MUCH simpler. Target design:
+
+
+      Panel (a) - Problem:
+
+      - Box 1: "d=128" (blue, large)
+
+      - Arrow: "compress"
+
+      - Box 2: "d=107" (red, large)
+
+      - Result: "+88% latency" in HUGE font (20pt+)
+
+      - REMOVE: all the alignment violation explanation text
+
+
+      Panel (b) - Solution:
+
+      - Box 1: "d=107" (red)
+
+      - Arrow: "repair"
+
+      - Box 2: "d=112" (green)
+
+      - Result: "+30% speedup, 4.7% overhead" in LARGE font
+
+      - REMOVE: bit-exact preservation text (put in caption)
+
+
+      All fonts: MINIMUM 12pt, key numbers 18-24pt
+
+      '
   - agent: writer
-    command: python scripts/create_paper_figures.py
+    command: python scripts/create_paper_figures.py && cd Latex && pdflatex main.tex
     depends_on:
     - 1
-    expected_output: fig1_overview.pdf updated
+    expected_output: Simplified Figure 1 generated
     status: pending
     step: 2
-    task: Regenerate figures after modification
+    task: 'After modifying fig1_overview(), regenerate figures and recompile:
+
+      python scripts/create_paper_figures.py && cd Latex && pdflatex main.tex
+
+      '
   depends_on: []
-  description: '**Reviewer Issue**: "Figure 1 attempts to convey too much information.
+  description: 'Reviewer observed (line 270-276):
 
-    The panels contain many visual elements competing for attention."
+    - "视觉繁忙，有许多竞争元素（流程箭头、百分比、条形图、标签）"
+
+    - "部分标注文本约为 6pt（较小）"
 
 
-    **Location**: Page 2, Figure 1
+    Previous fix: "Simplified" by removing bottom trade-off box
+
+    Why it failed: Still has flow diagram + boxes + percentages + annotations
 
 
-    **Note**: The fig1_overview() function was already redesigned (see comments
+    NEW APPROACH: Focus on ONLY the key message
 
-    in lines 64-72), but reviewer still finds it complex. Consider further
+    - Panel (a): Original -> Compressed -> "+88%" impact (3 elements only)
 
-    simplification.
+    - Panel (b): Misaligned -> Repair -> "+30%" result (3 elements only)
+
+    - Remove technical details (107 % 8 != 0, etc.) - put in caption instead
 
     '
   id: M2
@@ -190,85 +279,101 @@ issues:
   max_inner_loops: 2
   priority: high
   status: completed
-  title: Figure 1 Visual Complexity
+  title: Figure 1 visual complexity
   type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: Figure 3 with more prominent THEORETICAL ANALYSIS label
+    expected_output: Caption clarified
     status: pending
     step: 1
-    target_file: scripts/create_paper_figures.py
-    target_function: fig3_palu_distribution
-    task: "Modify fig3_palu_distribution() in scripts/create_paper_figures.py:\n1.\
-      \ Make the \"THEORETICAL ANALYSIS\" banner larger and more prominent\n   - Consider\
-      \ using a colored background that contrasts with histogram\n   - Use bold, larger\
-      \ font (14pt+)\n2. Add a brief explanatory note directly on the figure:\n  \
-      \ \"Based on Fisher information analysis of 512 attention heads\"\n3. Consider\
-      \ separating the statistics summary from histogram if possible\n"
-  - agent: writer
-    command: python scripts/create_paper_figures.py
-    depends_on:
-    - 1
-    expected_output: fig3_palu_dist.pdf updated
-    status: pending
-    step: 2
-    task: Regenerate figures after modification
+    target_file: Latex/main.tex
+    target_section: Figure caption for fig6_e2e
+    task: 'In Latex/main.tex, modify Figure 5 (fig6_e2e) caption:
+
+
+      Current text (line ~377-378):
+
+      "PaLU achieves 11.5× decode speedup via KV cache compression, with minimal
+
+      prefill overhead (−2%). Since production PaLU enforces 32-multiple alignment,
+
+      no dimension repair is needed."
+
+
+      NEW caption - make it CRYSTAL CLEAR:
+
+      "End-to-end performance: Baseline vs.\ PaLU on Llama-3-8B.
+
+      \textbf{Note: This speedup is from KV cache compression, not dimension repair.}
+
+      PaLU''s 11.5$\times$ decode speedup comes from reduced memory bandwidth
+
+      (compressed KV cache), demonstrating the value of compression.
+
+      Production PaLU enforces 32-multiple alignment, so dimension repair is
+
+      not needed. This figure provides context for compression benefits;
+
+      dimension repair applies when alignment constraints are relaxed (see Table~\ref{tab:applicability})."
+
+      '
   depends_on: []
-  description: '**Reviewer Issue**: "The banner showing ''Aligned: 3.1%, Misaligned
-    96.9%''
+  description: 'Reviewer observed (line 310-312, 425):
 
-    competes with the histogram. The distinction between theoretical and
+    - "11.5x 加速与 dimension repair 无关，来自 KV cache 压缩"
 
-    empirical could be clearer."
-
-
-    **Location**: Page 3, Figure 3
+    - "读者可能误以为 11.5x 来自 dimension repair"
 
 
-    **Current State**: Figure has "THEORETICAL ANALYSIS" banner.
+    The current Figure 5 (fig6_e2e.pdf) shows Baseline vs PaLU performance.
 
-    The reviewer wants it more visually distinct.
+    The 11.5x decode speedup is from KV cache compression, NOT dimension repair.
+
+
+    Need to clarify this in the caption AND possibly move to Background.
 
     '
   id: M3
   inner_loop_count: 0
-  max_inner_loops: 2
+  max_inner_loops: 1
   priority: high
   status: completed
-  title: Figure 3 THEORETICAL ANALYSIS Clarity
-  type: FIGURE_CODE_REQUIRED
+  title: Figure 5 caption misleading - 11.5x unrelated to repair
+  type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: LaTeX comment added flagging author name for verification
+    expected_output: Author name verification flag maintained
+    note: REQUIRES HUMAN VERIFICATION - orchestrator should alert user
     status: pending
     step: 1
     target_file: Latex/main.tex
-    task: 'In Latex/main.tex, find the author list and add a LaTeX comment
-
-      to flag the name for verification:
+    task: 'The TODO comment at line 46-47 already flags this issue.
 
 
-      % TODO: Verify author name spelling - Reviewer flagged "Tian Lvy"
+      Since this requires human verification (we cannot determine the correct
 
-      % as potential typo (likely "Tian Lyu"?)
+      spelling programmatically), add a more prominent warning:
 
 
-      Do NOT change the name without human confirmation.
+      Change the TODO to a \marginpar warning or add to abstract as:
+
+      "[AUTHOR NAME VERIFICATION REQUIRED: Please confirm ''Tian Lvy'' spelling]"
+
+
+      For now, keep the existing TODO comment but ensure it''s visible.
+
+      The orchestrator should flag this for human review.
 
       '
   depends_on: []
-  description: '**Reviewer Issue**: "''Tian Lvy'' appears to be a typo (likely ''Tian
-    Lyu''
+  description: 'Reviewer observed (line 147-149, 255, 260-262):
 
-    or similar based on common transliterations)."
+    - "第二作者''Tian Lvy''可能是''Tian Lyu''或''Tian Lv''的拼写错误"
 
-
-    **Location**: Page 1, Author list
+    - Code already has TODO comment flagging this
 
 
-    **Action**: This requires human verification. Add a LaTeX comment
-
-    flagging this for author review.
+    This is a critical issue - author names MUST be correct.
 
     '
   id: M4
@@ -276,204 +381,455 @@ issues:
   max_inner_loops: 1
   priority: high
   status: completed
-  title: Author Name Typo Verification
+  title: Author name potential typo - Tian Lvy
   type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: Table 1 std notation standardized
+    expected_output: Labels spread out with no overlap
     status: pending
     step: 1
-    target_file: Latex/main.tex
-    task: 'Fix m2: Table 1 std deviation formatting in Latex/main.tex
-
-
-      Find Table 1 (SDPA Backend Latency Comparison) and standardize all
-
-      std deviation values to 2 decimal places with leading zero:
-
-      - Change "±.03" to "±0.03"
-
-      - Change "±.20" to "±0.20"
-
-      - Apply consistently across all cells
-
-      '
-  - agent: writer
-    depends_on:
-    - 1
-    expected_output: Table 3 made more visually prominent
-    status: pending
-    step: 2
-    target_file: Latex/main.tex
-    task: "Fix m3: Table 3 visual prominence in Latex/main.tex\n\nFind Table 3 (Applicability\
-      \ Framework) and make it more prominent:\n1. Make \"Yes\" entries bold: \\textbf{Yes\
-      \ (+25-28\\%)}\n2. Make \"No\" entries bold: \\textbf{No (-0.8\\%)}\n3. Consider\
-      \ using \\cellcolor for emphasis if not breaking format\n4. Update caption to\
-      \ emphasize importance:\n   \"Key guidance for practitioners on when dimension\
-      \ repair applies.\"\n"
-  - agent: writer
-    depends_on:
-    - 2
-    expected_output: Consistent decimal precision across tables
-    status: pending
-    step: 3
-    target_file: Latex/main.tex
-    task: 'Fix m5: Table decimal precision consistency in Latex/main.tex
-
-
-      Review all tables and standardize:
-
-      - Latency values: 2 decimal places (e.g., 2.06ms not 2.064ms)
-
-      - Speedup percentages: 1 decimal place (e.g., 27.8% not 27.78%)
-
-      - Memory overhead: 1 decimal place
-
-
-      Focus on Tables 4, 5, 6 which have precision inconsistencies.
-
-      '
-  - agent: writer
-    depends_on:
-    - 3
-    expected_output: Section 6.7 limitations in numbered list format
-    status: pending
-    step: 4
-    target_file: Latex/main.tex
-    task: "Fix m6: Section 6.7 Limitations visibility in Latex/main.tex\n\nFind Section\
-      \ 6.7 (Scope and Limitations) and improve visibility:\n1. Convert prose to numbered\
-      \ list format:\n   \\begin{enumerate}[leftmargin=*]\n   \\item \\textbf{Scope}:\
-      \ ...\n   \\item \\textbf{Downstream Tasks}: ...\n   \\item \\textbf{Hardware}:\
-      \ ...\n   \\end{enumerate}\n2. This makes limitations easier to scan and reference\n"
+    target_file: scripts/create_paper_figures.py
+    target_function: fig5_repair_tradeoff
+    task: "In fig5_repair_tradeoff(), increase label offsets MORE aggressively:\n\n\
+      Current offsets (lines 463-469):\nlabel_configs = {\n    107: {'offset': (-70,\
+      \ 45), ...},\n    114: {'offset': (55, 10), ...},\n    ...\n}\n\nNEW offsets\
+      \ - MUCH more spread out:\nlabel_configs = {\n    107: {'offset': (-100, 60),\
+      \ 'ha': 'center'},   # top-left, higher\n    114: {'offset': (80, 25), 'ha':\
+      \ 'left'},       # right, higher\n    117: {'offset': (-100, -40), 'ha': 'right'},\
+      \   # bottom-left\n    120: {'offset': (60, 25), 'ha': 'left'},       # right\n\
+      \    121: {'offset': (80, 55), 'ha': 'left'},       # top-right\n    125: {'offset':\
+      \ (-50, -70), 'ha': 'center'},   # bottom\n}\n\nAlso increase arrow line width\
+      \ for visibility.\n"
   depends_on:
   - M1
-  description: 'Batch fix for minor issues:
+  description: 'Reviewer observed (line 159-161, 327):
 
-    - m1: Figure 5 label clustering (FIGURE_CODE_REQUIRED sub-task)
+    - "散点图标签（d=107, d=114等）聚集在上方区域，可能重叠"
 
-    - m2: Table 1 std deviation formatting
 
-    - m3: Table 3 visual prominence
+    The adjustText library is imported but labels still cluster.
 
-    - m5: Table decimal precision consistency
-
-    - m6: Section 6.7 limitations visibility
+    Need MORE AGGRESSIVE offsets and potentially leader lines.
 
     '
-  id: m-batch
+  id: m1
   inner_loop_count: 0
   max_inner_loops: 1
   priority: medium
   status: completed
-  title: Fix All Minor Presentation Issues
+  title: Figure 5/6 label clustering
+  type: FIGURE_CODE_REQUIRED
+- actions:
+  - agent: writer
+    expected_output: Std notation standardized
+    status: pending
+    step: 1
+    target_file: Latex/main.tex
+    task: 'In Latex/main.tex Table 1 (lines 227-239):
+
+      Change all std notation to 2 decimal places:
+
+      - ±.03 -> ±0.03
+
+      - ±.02 -> ±0.02
+
+      - ±.04 -> ±0.04
+
+      - ±.05 -> ±0.05
+
+      - ±.06 -> ±0.06
+
+      - ±.2 -> ±0.20
+
+
+      Use consistent format: X.XX±0.XX
+
+      '
+  depends_on: []
+  description: 'Reviewer observed (line 164-165, 383):
+
+    - "标准差表示法不一致（±.03 vs ±.20）"
+
+
+    Need to standardize to 2 decimal places: ±0.03, ±0.20
+
+    '
+  id: m2
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: medium
+  status: completed
+  title: Table 1 std notation inconsistent
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: Table 3 more visually prominent
+    status: pending
+    step: 1
+    target_file: Latex/main.tex
+    task: 'In Latex/main.tex Table 3 (lines 346-365):
+
+
+      The table already has colored cells. To make it MORE prominent:
+
+      1. Increase the green/red cell colors: green!55 -> green!65, red!50 -> red!60
+
+      2. Make YES/NO text larger: \textbf{\Large YES} -> \textbf{\LARGE YES}
+
+      3. Add a box around the table with \fbox or frame environment
+
+
+      Also add text before the table:
+
+      "\noindent\rule{\columnwidth}{0.5pt}\\
+
+      \textbf{[KEY PRACTITIONER GUIDANCE]}\\
+
+      \noindent\rule{\columnwidth}{0.5pt}"
+
+      '
+  depends_on: []
+  description: 'Reviewer observed (line 169-173, 385):
+
+    - "关键适用性框架表格与其作为贡献的重要性相比缺乏视觉突出性"
+
+
+    Table 3 is a KEY contribution but doesn''t stand out visually.
+
+    '
+  id: m3
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: medium
+  status: completed
+  title: Table 3 visual prominence
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: Figure widths reduced for better density
+    status: pending
+    step: 1
+    target_file: Latex/main.tex
+    task: 'In Latex/main.tex, reduce Figure 5 (fig6_e2e) width:
+
+
+      Line ~376: Change
+
+      \includegraphics[width=\columnwidth]{figures/fig6_e2e.pdf}
+
+      to
+
+      \includegraphics[width=0.85\columnwidth]{figures/fig6_e2e.pdf}
+
+
+      Also for Figure 5 (fig5_repair_tradeoff) at line ~416:
+
+      Change width=\columnwidth to width=0.9\columnwidth
+
+
+      This increases information density as reviewer suggested.
+
+      '
+  depends_on: []
+  description: 'Reviewer observed (line 175-179, 377, 406-409):
+
+    - "Figure 5 只有 4 根柱子占用整栏"
+
+    - "Figure 6 只有 6 个数据点占用整栏"
+
+    - Suggested: "缩小到 0.7-0.8 栏宽"
+
+    '
+  id: m4
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: medium
+  status: completed
+  title: Figure 5/6 information density low
+  type: FIGURE_CODE_REQUIRED
+- actions:
+  - agent: writer
+    expected_output: Decimal precision standardized
+    status: pending
+    step: 1
+    target_file: Latex/main.tex
+    task: 'In all tables in Latex/main.tex:
+
+      - Latency: 2 decimal places (e.g., 1.49ms, 2.06ms)
+
+      - Percentage: 1 decimal place (e.g., 27.8%, 4.7%)
+
+
+      Tables to check: 1, 4, 5, 6
+
+      '
+  depends_on: []
+  description: 'Reviewer observed (line 181-185):
+
+    - "延迟值使用不同精度"
+
+    - Suggested: "标准化延迟为 2 位小数（1.49ms），加速为 1 位小数（27.8%）"
+
+    '
+  id: m5
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: low
+  status: completed
+  title: Table decimal precision inconsistent
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: Limitations section more prominent
+    status: pending
+    step: 1
+    target_file: Latex/main.tex
+    task: 'In Latex/main.tex Section 6.7 (lines 483-492):
+
+
+      The section already uses enumerate (numbered list).
+
+      To make it more prominent, add bold headers:
+
+
+      \item \textbf{Scope}: The 96.9\% ...
+
+      \item \textbf{Downstream Tasks}: Zero-padding ...
+
+      \item \textbf{Hardware Generalization}: All experiments ...
+
+
+      Also consider adding a horizontal rule before/after:
+
+      \noindent\rule{\columnwidth}{0.4pt}
+
+      '
+  depends_on: []
+  description: 'Reviewer observed (line 186-192):
+
+    - "Scope 和 Limitations 很重要但不够突出"
+
+    - Suggested: "使用编号列表或小表格格式"
+
+
+    The section already uses enumerate. May need bolder formatting.
+
+    '
+  id: m6
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: low
+  status: completed
+  title: Section 6.7 Limitations visibility
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: H100 prediction softened
+    status: pending
+    step: 1
+    target_file: Latex/main.tex
+    target_section: Section 8 Conclusion
+    task: 'In Latex/main.tex Section 8 (lines 565-569):
+
+
+      Current text:
+
+      "While our experiments focus on A100, we expect similar dimensional
+
+      collapse on H100/H200."
+
+
+      Change to:
+
+      "Our experiments focus on A100; H100/H200 behavior requires validation.
+
+      While H100''s 4th-generation Tensor Cores use similar tile sizes..."
+
+
+      This removes the unsubstantiated "we expect" claim.
+
+      '
+  depends_on: []
+  description: 'Reviewer observed (line 193-198, 350-351):
+
+    - "''we expect similar dimensional collapse on H100/H200''但没有任何 H100 数据支持"
+
+    - Suggested: "删除此声明，或修改为''H100 validation is future work''"
+
+
+    Current text at line 565-568 already says "H100 validation is future work"
+
+    but also makes predictions. Need to soften the predictions.
+
+    '
+  id: m7
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: low
+  status: completed
+  title: H100 prediction statement unsupported
   type: WRITING_ONLY
 notes:
-- Figure script already has rcParams set to 10pt+, need to find hardcoded overrides
-- Figures need regeneration after script changes
-- Author name fix requires human verification - only add TODO comment
-- Focus on verifiable, concrete improvements rather than text rewrites
-- Previous iteration already repositioned paper as measurement study
-planner_summary: "## Iteration 110 Analysis\n\n### Current Status\n- Score: 7.35/10\
-  \ (Weak Accept)\n- Bottleneck: Paper Presentation (7.0/10)\n- Stagnation: Score\
-  \ stuck at 7.35 for ~100 iterations\n\n### Reviewer's Focus\nThe review is almost\
-  \ entirely focused on **visual/presentation issues**:\n- Figure font sizes (M1)\n\
-  - Figure 1 complexity (M2)\n- Figure 3 clarity (M3)\n- Author name typo (M4)\n-\
-  \ Various minor formatting issues (m1-m6)\n\n### Previous Plan Analysis\nThe previous\
-  \ action_plan.yaml (iteration 109) focused on repositioning the paper\nas a \"measurement\
-  \ study\" to address the E2E validation gap. All issues were\nmarked as \"completed\"\
-  . However, the score has not improved.\n\n### Strategy for This Iteration\nSince\
-  \ the reviewer explicitly identifies Paper Presentation (7.0) as the bottleneck\n\
-  and all Major Issues are visual/presentation related, this plan focuses on:\n\n\
-  1. **FIGURE_CODE_REQUIRED tasks**: Modify scripts/create_paper_figures.py\n   -\
-  \ The script already has some font fixes from previous iterations\n   - Need to\
-  \ verify all figures meet 8pt minimum\n   - Simplify Figure 1 further\n   - Adjust\
-  \ Figure 5 label positioning\n\n2. **WRITING_ONLY tasks**: Fix LaTeX formatting\n\
-  \   - Table 1 std notation\n   - Table 3 prominence\n   - Author name verification\n\
-  \n### Key Insight\nThe figure script (scripts/create_paper_figures.py) already has\
-  \ font settings\nat 10-13pt (lines 42-57). However, the reviewer still sees 6-7pt\
-  \ fonts in the\nPDF. This suggests either:\n1. The figures were not regenerated\
-  \ after script updates\n2. Some specific annotations use hardcoded smaller fonts\n\
-  3. The rcParams don't apply to all text elements\n\n### Expected Outcome\n- Paper\
-  \ Presentation: 7.0 → 7.3 (figure improvements)\n- Technical Quality: 7.5 (unchanged)\n\
-  - Target Score: 7.35 → 7.5\n"
-review_iteration: 110
+- 'CRITICAL: Previous figure fixes were too conservative - need aggressive changes'
+- The reviewer's visual observations (30+ specific issues) are actionable
+- 'Figure fonts: must be 11pt+ to guarantee 8pt+ at any zoom level'
+- 'Figure 1: remove ALL explanatory text, focus on key numbers only'
+- M4 (author name) requires human verification - flag for orchestrator
+- Path to 8.0 still requires positive E2E validation (not addressed here)
+planner_summary: '## Iteration 112 - Figure Quality Breakthrough
+
+
+  ### Critical Insight
+
+  The reviewer provided EXTREMELY detailed visual feedback (30+ specific observations).
+
+  Previous iterations added "REVIEWER FIX M1/M2/M3" comments to the code but the
+
+  changes were NOT aggressive enough.
+
+
+  ### Root Cause of Stagnation
+
+  1. Figure fonts: Set to 9-10pt when reviewer wants 8pt MINIMUM (implying 10pt+ safe)
+
+  2. Figure 1: "Simplified" but still has competing elements (flow + bars + percentages)
+
+  3. Figure 5/6: Label overlap not fully fixed despite adjustText
+
+
+  ### This Iteration''s Strategy
+
+  Focus on FIGURE_CODE_REQUIRED tasks with AGGRESSIVE changes:
+
+  1. Increase ALL figure fonts to 11-12pt (not borderline 8-9pt)
+
+  2. Simplify Figure 1 to JUST show the key numbers (88%, 30%)
+
+  3. Fix Figure 5/6 labels with more aggressive offset values
+
+  4. Reduce Figure 5/6 widths to 0.7-0.8 columnwidth
+
+
+  ### Why This Can Work
+
+  - Presentation bottleneck (7.0) can improve with proper figure fixes
+
+  - Reviewer explicitly said fonts are "at the boundary" (7pt) - fixing to 11pt is
+  clear improvement
+
+  - Previous "fixes" were conservative; need aggressive changes
+
+  '
+review_iteration: 112
 review_score: 7.35
 sanity_check:
   all_writing_only: false
   figure_code_tasks: 3
-  reason: 'This plan is NOT all WRITING_ONLY because:
+  reason: 'This plan has 3 FIGURE_CODE_REQUIRED tasks, which is correct given:
 
-    1. M1, M2, M3 are FIGURE_CODE_REQUIRED (modify Python script + regenerate)
+    1. Reviewer explicitly identified font sizes as "7pt" (below 8pt minimum)
 
-    2. M4, m-batch are WRITING_ONLY (LaTeX text changes)
+    2. Reviewer explicitly said Figure 1 has "too many competing elements"
 
-
-    The reviewer''s bottleneck is Paper Presentation (7.0), and all Major Issues
-
-    are visual/figure-related. This justifies the focus on figure fixes.
+    3. Reviewer explicitly said Figure 5/6 labels "may overlap"
 
 
-    Note: The reviewer mentions E2E validation would help reach 8.0/10, but
+    Previous iterations had FIGURE_CODE comments in the code but changes
 
-    findings.yaml documents that:
+    were TOO CONSERVATIVE. This plan prescribes AGGRESSIVE changes:
 
-    - RAP SVD: -0.8% (no benefit due to projection architecture)
+    - Fonts: 9pt -> 11-12pt (not borderline)
 
-    - PaLU: 100% aligned, cannot produce misaligned dimensions
+    - Figure 1: Dramatic simplification (not minor tweaks)
 
-    - Vanilla SVD: No off-the-shelf implementation exists
-
-
-    Given the exhausted experiment options, presentation improvements are the
-
-    viable path forward within this iteration.
+    - Labels: Much larger offsets (not small adjustments)
 
     '
-  verification: 'Checked: Previous plan (iteration 109) focused on repositioning as
+  writing_only_tasks: 8
+stagnation_analysis:
+  consecutive_no_improvement: 100+
+  previous_approaches:
+  - Figure font sizes set to rcParams (iteration ~50)
+  - Figure 1 redesign (iteration ~60)
+  - Figure 3 THEORETICAL banner (iteration ~70)
+  - Writing-only fixes (iterations 80-111)
+  why_no_progress: 'The figure code has "reviewer fix" comments but the fixes were
+    INSUFFICIENT:
 
-    "measurement study" - this was a strategic pivot. Current plan focuses
+    - rcParams set to 11pt base, but individual elements still 9pt
 
-    on the concrete visual issues the reviewer identifies.
+    - Figure 1 "simplified" but still has many competing elements
+
+    - adjustText library not being used effectively for label overlap
+
+
+    The reviewer''s detailed visual analysis shows these issues PERSIST.
 
     '
-  writing_only_tasks: 2
 success_criteria:
   expected_score_improvement:
     confidence: medium
     current: 7.35
-    stretch: 7.5
-    target: 7.45
+    stretch: 7.65
+    target: 7.5
   must_complete:
-  - 'M1: Figure fonts verified to be 8pt+ in final PDF'
-  - 'M2: Figure 1 simplified'
-  - 'M3: Figure 3 THEORETICAL label more prominent'
-  - 'M4: Author name flagged for verification'
-  - 'm-batch: Table formatting standardized'
-  score_rationale: "**Paper Presentation (7.0 → 7.3)**: +0.3\n  - Figure font fixes\
-    \ address direct reviewer concern\n  - Figure 1 simplification reduces visual\
-    \ clutter\n  - Table formatting shows attention to detail\n\n**Technical Quality\
-    \ (7.5)**: Unchanged\n  - No new experiments (options exhausted)\n  - Kernel-level\
-    \ data remains solid\n\n**Innovation (7.5)**: Unchanged\n**Writing (7.5)**: Unchanged\n\
-    \nWeighted: 0.4*7.5 + 0.3*7.3 + 0.2*7.5 + 0.1*7.5 = 7.44\n\nConservative target:\
-    \ 7.45 (if figure fixes are verified effective)\n"
+  - 'M1: Figure fonts -> 11-12pt (regenerate figures)'
+  - 'M2: Figure 1 simplification (regenerate figures)'
+  - 'M3: Figure 5 caption clarification'
+  score_rationale: '**Paper Presentation (7.0 -> 7.3)**:
+
+    - Font sizes to 11pt clearly meets 8pt minimum requirement
+
+    - Figure 1 simplification reduces "competing elements"
+
+    - Label overlap fix improves readability
+
+    Expected: +0.3 on Presentation
+
+
+    **Technical Quality (7.5)**: Unchanged (no new experiments)
+
+    **Innovation (7.5)**: Unchanged
+
+    **Writing (7.5)**: Unchanged
+
+
+    Weighted: 0.4*7.5 + 0.3*7.3 + 0.2*7.5 + 0.1*7.5 = 7.44
+
+
+    Target: 7.45-7.50
+
+    '
 writing_tasks:
-- changes_required:
-  - change: Add TODO comment for name verification
-    section: Author list
-  description: Flag author name for verification
+- description: Clarify Figure 5 caption
+  id: M3
+  target_files:
+  - Latex/main.tex
+- description: Flag author name for verification
   id: M4
   target_files:
   - Latex/main.tex
-- changes_required:
-  - change: Standardize std notation to ±0.XX
-    section: Table 1
-  - change: Bold Yes/No entries for prominence
-    section: Table 3
-  - change: Consistent decimal precision
-    section: Tables 4-6
-  - change: Convert to numbered list
-    section: Section 6.7
-  description: Fix minor LaTeX formatting issues
-  id: m-batch
+- description: Standardize std notation
+  id: m2
+  target_files:
+  - Latex/main.tex
+- description: Make Table 3 more prominent
+  id: m3
+  target_files:
+  - Latex/main.tex
+- description: Reduce figure widths
+  id: m4
+  target_files:
+  - Latex/main.tex
+- description: Standardize decimal precision
+  id: m5
+  target_files:
+  - Latex/main.tex
+- description: Make Limitations more prominent
+  id: m6
+  target_files:
+  - Latex/main.tex
+- description: Soften H100 predictions
+  id: m7
   target_files:
   - Latex/main.tex

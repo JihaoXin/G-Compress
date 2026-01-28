@@ -1,17 +1,19 @@
 best_score: 7.6
 expected_changes: {}
 issue_history:
-  M1: 1
-  M2: 1
-  M3: 1
-  M4: 1
-  m1: 1
-  m2: 1
-  m3: 1
-  m4: 1
-  m5: 1
-  m6: 1
+  M1: 3
+  M2: 3
+  M3: 3
+  M4: 3
+  m1: 3
+  m2: 3
+  m3: 3
+  m4: 3
+  m5: 3
+  m6: 3
+  m7: 1
 last_issues:
+- m7
 - m1
 - M3
 - m5
@@ -22,9 +24,9 @@ last_issues:
 - m2
 - M4
 - M2
-last_repair_iteration: 0
-last_updated: '2026-01-28T09:58:33.087773'
-repair_effective: null
+last_repair_iteration: 1
+last_updated: '2026-01-28T10:15:36.333713'
+repair_effective: false
 scores:
 - 7.35
 - 7.35
