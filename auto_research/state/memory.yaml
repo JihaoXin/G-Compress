@@ -1,16 +1,16 @@
 best_score: 7.6
 expected_changes: {}
 issue_history:
-  M1: 17
-  M2: 17
-  M3: 17
-  M4: 17
-  m1: 17
-  m2: 17
-  m3: 17
-  m4: 17
-  m5: 17
-  m6: 17
+  M1: 21
+  M2: 21
+  M3: 21
+  M4: 21
+  m1: 21
+  m2: 21
+  m3: 21
+  m4: 21
+  m5: 21
+  m6: 21
   m7: 1
 issue_repair_methods:
   M1_SCOPE_CLARIFICATION:
@@ -23,19 +23,21 @@ issue_repair_methods:
   - WRITING_ONLY
   MINOR_BATCH:
   - WRITING_ONLY
+  VISIBILITY_PACKAGE:
+  - WRITING_ONLY
 last_issues:
-- m1
-- M1
 - m2
-- m5
-- m4
-- M4
-- M2
-- M3
+- m1
 - m3
+- M3
+- M4
+- m4
 - m6
-last_repair_iteration: 4
-last_updated: '2026-01-28T11:04:33.190176'
+- M2
+- M1
+- m5
+last_repair_iteration: 5
+last_updated: '2026-01-28T16:08:30.048299'
 repair_effective: false
 scores:
 - 7.35
