@@ -12,6 +12,21 @@
   year={2024}
 }
 
+@misc{flashattention3,
+  title={FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision},
+  author={Shah, Jay and Bikshandi, Ganesh and Zhang, Ying and Thakkar, Vijay and Ramani, Pradeep and Dao, Tri},
+  howpublished={arXiv preprint arXiv:2407.08608},
+  year={2024}
+}
+
+@misc{nvidia_hopper_whitepaper,
+  title={NVIDIA H100 Tensor Core GPU Architecture},
+  author={{NVIDIA Corporation}},
+  howpublished={White Paper},
+  year={2022},
+  note={\url{https://resources.nvidia.com/en-us-tensor-core}}
+}
+
 @inproceedings{palu,
   title={PaLU: Compressing KV-Cache with Low-Rank Projection},
   author={Chang, Chi-Chih and Huang, Wei-Cheng and Liu, Chien-Yu and Lin, Chun-Feng and Chen, Kai-Chiang and Wu, An-Yeu},
@@ -88,3 +103,305 @@
   booktitle={SOSP},
   year={2023}
 }
+
+@inproceedings{rap,
+  title={Reducing Transformer Key-Value Cache Size with Cross-Layer Attention},
+  author={Liu, William and Zhou, Hao and Zhang, Jiaxuan and Zou, James},
+  booktitle={NeurIPS},
+  year={2024}
+}
+
+@inproceedings{svdllm,
+  title={SVD-LLM: Truncation-aware Singular Value Decomposition for Large Language Model Compression},
+  author={Wang, Xin and Zheng, Yu and Wan, Zhongwei and Zhang, Mi},
+  booktitle={ICLR},
+  year={2025}
+}
+
+@inproceedings{lora,
+  title={LoRA: Low-Rank Adaptation of Large Language Models},
+  author={Hu, Edward J and Shen, Yelong and Wallis, Phillip and Allen-Zhu, Zeyuan and Li, Yuanzhi and Wang, Shean and Wang, Lu and Chen, Weizhu},
+  booktitle={ICLR},
+  year={2022}
+}
+
+@inproceedings{qlora,
+  title={QLoRA: Efficient Finetuning of Quantized LLMs},
+  author={Dettmers, Tim and Pagnoni, Artidoro and Holtzman, Ari and Zettlemoyer, Luke},
+  booktitle={NeurIPS},
+  year={2023}
+}
+
+@misc{gguf,
+  title={GGML: Tensor Library for Machine Learning},
+  author={Gerganov, Georgi},
+  howpublished={\url{https://github.com/ggerganov/ggml}},
+  year={2024}
+}
+
+@inproceedings{flashdecoding,
+  title={FlashDecoding++: Faster Large Language Model Inference on GPUs},
+  author={Hong, Ke and Dai, Guohao and Xu, Jiaming and Mao, Qiuli and Li, Xiuhong and Liu, Jun and Chen, Kangdi and Dong, Yuhan and Wang, Yu},
+  booktitle={MLSys},
+  year={2024}
+}
+
+@misc{nvidia_perf_guide,
+  title={Matrix Multiplication Background User's Guide},
+  author={NVIDIA},
+  howpublished={\url{https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/}},
+  year={2024}
+}
+
+@inproceedings{flashinfer,
+  title={FlashInfer: Efficient and Customizable Attention Engine for LLM Inference},
+  author={Ye, Zihao and Chen, Lianmin and Zheng, Ruihang and others},
+  booktitle={MLSys},
+  year={2025}
+}
+
+@inproceedings{caldera,
+  title={CALDERA: Compressing LLMs using Low Rank and Low Precision Decomposition},
+  author={Wei, Jiwei and others},
+  booktitle={arXiv preprint arXiv:2408.15285},
+  year={2024}
+}
+
+@misc{tgi,
+  title={Text Generation Inference},
+  author={Hugging Face},
+  howpublished={\url{https://github.com/huggingface/text-generation-inference}},
+  year={2024}
+}
+
+@misc{pytorch_sdpa,
+  title={Scaled Dot Product Attention Documentation},
+  author={PyTorch},
+  howpublished={\url{https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html}},
+  year={2024}
+}
+
+@inproceedings{mixtral,
+  title={Mixtral of Experts},
+  author={Jiang, Albert Q and Sablayrolles, Alexandre and Roux, Antoine and Mensch, Arthur and Savary, Blanche and Bamford, Chris and others},
+  booktitle={arXiv preprint arXiv:2401.04088},
+  year={2024}
+}
+
+@inproceedings{squeezellm,
+  title={SqueezeLLM: Dense-and-Sparse Quantization},
+  author={Kim, Sehoon and Hooper, Coleman and Gholami, Amir and Dong, Zhen and Li, Xiuyu and Shen, Sheng and Mahoney, Michael W and Keutzer, Kurt},
+  booktitle={ICML},
+  year={2024}
+}
+
+@inproceedings{llmint8,
+  title={LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale},
+  author={Dettmers, Tim and Lewis, Mike and Belkada, Younes and Zettlemoyer, Luke},
+  booktitle={NeurIPS},
+  year={2022}
+}
+
+@inproceedings{speculative_decoding,
+  title={Fast Inference from Transformers via Speculative Decoding},
+  author={Leviathan, Yaniv and Kalman, Matan and Matias, Yossi},
+  booktitle={ICML},
+  year={2023}
+}
+
+@inproceedings{medusa,
+  title={Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads},
+  author={Cai, Tianle and Li, Yuhong and Geng, Zhengyang and Peng, Hongwu and Lee, Jason D and Chen, Deming and Dao, Tri},
+  booktitle={ICML},
+  year={2024}
+}
+
+% ===== HIGH PRIORITY (80+) =====
+
+@article{quest,
+  title={QUEST: Query-Aware Sparsity for Efficient Long-Context LLM Inference},
+  author={Tang, Jiaming and Tang, Yilong and Yang, Shang and Vora, Ashish and Han, Song},
+  journal={arXiv preprint arXiv:2406.10774},
+  year={2024}
+}
+
+% ===== COMPRESSION METHODS =====
+
+@inproceedings{smoothquant,
+  title={SmoothQuant: Accurate and Efficient Post-Training Quantization for Large Language Models},
+  author={Xiao, Guangxuan and Lin, Ji and Seznec, Mickael and Wu, Hao and Demouth, Julien and Han, Song},
+  booktitle={ICML},
+  year={2023}
+}
+
+@article{h2o,
+  title={H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models},
+  author={Zhang, Zhenyu and Sheng, Ying and Zhou, Tianyi and Chen, Tianlong and Zheng, Lianmin and Cai, Ruisi and Song, Zhao and Tian, Yuandong and Ré, Christopher and Barrett, Clark and others},
+  journal={arXiv preprint arXiv:2306.14048},
+  year={2023}
+}
+
+@article{pyramidkv,
+  title={PyramidKV: Dynamic KV Cache Compression based on Pyramidal Information Funneling},
+  author={Cai, Zefan and Zhang, Yichi and Gao, Bofei and Liu, Yuliang and Liu, Tianyu and Lu, Keming and Xiong, Wayne and Dong, Yue and Chang, Baobao and Hu, Junjie and others},
+  journal={arXiv preprint arXiv:2406.02069},
+  year={2024}
+}
+
+@article{snapkv,
+  title={SnapKV: LLM Knows What You are Looking for Before Generation},
+  author={Li, Yuhong and Huang, Yingbing and Yang, Bowen and Venkitesh, Bharat and Locatelli, Acyr and Ye, Hanchen and Cai, Tianle and Lewis, Patrick and Chen, Deming},
+  journal={arXiv preprint arXiv:2404.14469},
+  year={2024}
+}
+
+@inproceedings{atom,
+  title={ATOM: Low-bit Quantization for Efficient and Accurate LLM Serving},
+  author={Zhao, Yilong and Xu, Chien-Yu and Gu, Yuhui and Guo, Song and Yang, Jingwen and Chen, Kan and Yu, Zhaoting and Zhou, Xingcheng and Mei, Hao and Guo, Xiaotao and others},
+  booktitle={MLSys},
+  year={2024}
+}
+
+@article{slimgpt,
+  title={SlimGPT: Layer-wise Structured Pruning for Large Language Models},
+  author={Li, Yilin and Peng, Bo and Guan, Dongxu and Gao, Yue and Li, Zheng and Huang, Jingjing},
+  journal={arXiv preprint arXiv:2401.12153},
+  year={2024}
+}
+
+% ===== GPU OPTIMIZATION =====
+
+@misc{volta_whitepaper,
+  title={NVIDIA Tesla V100 GPU Architecture},
+  author={{NVIDIA Corporation}},
+  howpublished={White Paper},
+  year={2017},
+  note={\url{https://images.nvidia.com/content/volta-architecture/pdf/volta-architecture-whitepaper.pdf}}
+}
+
+@misc{ampere_whitepaper,
+  title={NVIDIA A100 Tensor Core GPU Architecture},
+  author={{NVIDIA Corporation}},
+  howpublished={White Paper},
+  year={2020},
+  note={\url{https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/nvidia-ampere-architecture-whitepaper.pdf}}
+}
+
+@inproceedings{cutlass_paper,
+  title={CUTLASS: Fast Linear Algebra in CUDA C++},
+  author={Kerr, Andrew and Campbell, Dan and Trevithick, Mark},
+  booktitle={IEEE High Performance Extreme Computing Conference (HPEC)},
+  year={2017}
+}
+
+@misc{triton,
+  title={Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations},
+  author={Tillet, Philippe and Kung, H. T. and Cox, David},
+  howpublished={MAPL 2019},
+  year={2019}
+}
+
+% ===== EVALUATION & BENCHMARKING =====
+
+@article{llm_perf,
+  title={Full Stack Optimization of Transformer Inference: a Survey},
+  author={Kim, Sehoon and Mangalam, Karttikeya and Moon, Suhong and others},
+  journal={arXiv preprint arXiv:2302.14017},
+  year={2023}
+}
+
+@software{lmeval,
+  author = {Gao, Leo and
+            Tow, Jonathan and
+            Abbasi, Baber and
+            Biderman, Stella and
+            Black, Sid and
+            DiPofi, Anthony and
+            Foster, Charles and
+            Golding, Laurence and
+            Hsu, Jeffrey and
+            Le Noac'h, Alain and others},
+  title = {A framework for few-shot language model evaluation},
+  month = sep,
+  year = 2023,
+  publisher = {Zenodo},
+  version = {v0.4.0},
+  doi = {10.5281/zenodo.10256836},
+  url = {https://zenodo.org/records/10256836}
+}
+
+% ===== INFERENCE SYSTEMS =====
+
+@inproceedings{deepspeed,
+  title={ZeRO: Memory Optimizations Toward Training Trillion Parameter Models},
+  author={Rajbhandari, Samyam and Rasley, Jeff and Ruwase, Olatunji and He, Yuxiong},
+  booktitle={SC20: International Conference for High Performance Computing, Networking, Storage and Analysis},
+  pages={1--16},
+  year={2020}
+}
+
+@inproceedings{deepspeed_inference,
+  title={DeepSpeed Inference: Enabling Efficient Inference of Transformer Models at Unprecedented Scale},
+  author={Aminabadi, Reza Yazdani and Rajbhandari, Samyam and Awan, Ammar Ahmad and Li, Cheng and Li, Du and Zheng, Elton and Ruwase, Olatunji and Smith, Shaden and Zhang, Minjia and Rasley, Jeff and He, Yuxiong},
+  booktitle={SC22: International Conference for High Performance Computing, Networking, Storage and Analysis},
+  pages={1--15},
+  year={2022}
+}
+
+@inproceedings{orca,
+  title={ORCA: A Distributed Serving System for Transformer-Based Generative Models},
+  author={Yu, Gyeong-In and Jeong, Joo Seong and Kim, Geon-Woo and Kim, Soojeong and Chun, Byung-Gon},
+  booktitle={OSDI},
+  pages={521--538},
+  year={2022}
+}
+
+% ===== ATTENTION OPTIMIZATION =====
+
+@article{ring_attention,
+  title={Ring Attention with Blockwise Transformers for Near-Infinite Context},
+  author={Liu, Hao and Zaharia, Matei and Abbeel, Pieter},
+  journal={arXiv preprint arXiv:2310.01889},
+  year={2023}
+}
+
+@misc{xformers,
+  title={xFormers: A modular and hackable Transformer modelling library},
+  author={{Meta AI Research}},
+  howpublished={\url{https://github.com/facebookresearch/xformers}},
+  year={2022}
+}
+
+@inproceedings{efficient_transformers,
+  title={Efficient Transformers: A Survey},
+  author={Tay, Yi and Dehghani, Mostafa and Bahri, Dara and Metzler, Donald},
+  journal={ACM Computing Surveys},
+  volume={55},
+  number={6},
+  pages={1--28},
+  year={2022}
+}
+
+% ===== FOUNDATIONS =====
+
+@article{lottery_ticket,
+  title={The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks},
+  author={Frankle, Jonathan and Carbin, Michael},
+  journal={ICLR},
+  year={2019}
+}
+
+@inproceedings{roofline,
+  title={Roofline: An Insightful Visual Performance Model for Multicore Architectures},
+  author={Williams, Samuel and Waterman, Andrew and Patterson, David},
+  journal={Communications of the ACM},
+  volume={52},
+  number={4},
+  pages={65--76},
+  year={2009}
+}
+
+
+% ===== END OF ADDITIONS =====
+% Total entries: 25
+% Copy these to Latex/references.bib
