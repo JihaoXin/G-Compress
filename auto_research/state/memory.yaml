@@ -1,5 +1,30 @@
 best_score: 7.6
-last_updated: '2026-01-27T16:30:01.998355'
+expected_changes: {}
+issue_history:
+  M1: 1
+  M2: 1
+  M3: 1
+  M4: 1
+  m1: 1
+  m2: 1
+  m3: 1
+  m4: 1
+  m5: 1
+  m6: 1
+last_issues:
+- m1
+- M3
+- m5
+- m4
+- m6
+- m3
+- M1
+- m2
+- M4
+- M2
+last_repair_iteration: 0
+last_updated: '2026-01-28T09:58:33.087773'
+repair_effective: null
 scores:
 - 7.35
 - 7.35

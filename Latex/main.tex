@@ -19,6 +19,8 @@
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{tikz}
+\usepackage{placeins}  % For \FloatBarrier to prevent float drift
+\usepackage{colortbl}  % For \cellcolor in tables
 
 %% Code listing style
 \lstset{
@@ -41,6 +43,8 @@
 }
 \email{jihao.xin@kaust.edu.sa}
 
+% TODO: VERIFY AUTHOR NAME - Reviewer flagged "Tian Lvy" as potential typo
+% Common alternatives: "Tian Lyu", "Tian Lv" - please confirm correct spelling
 \author{Tian Lvy}
 \affiliation{
   \institution{KAUST}
@@ -134,6 +138,8 @@ This paper makes the following contributions:
   \item \textbf{Dimension Repair}: We propose a lightweight post-compression pass achieving 22--28\% kernel-level speedup with 3.7--7.2\% memory overhead (ROI: 3.5--5.9$\times$) when applicable (\S\ref{sec:solution}, \S\ref{sec:eval}).
 \end{enumerate}
 
+\FloatBarrier  % Ensure Figure 1 stays in Introduction
+
 %% ===========================================
 %% 2. BACKGROUND
 %% ===========================================
@@ -222,11 +228,11 @@ This is a hard constraint, not a performance penalty.
 \toprule
 $d$ & AUTO & FLASH & MEM\_EFF & MATH \\
 \midrule
-96  & 1.17{\scriptsize$\pm$0.03} & 1.12{\scriptsize$\pm$0.02} & 2.38{\scriptsize$\pm$0.05} & 26.00{\scriptsize$\pm$0.20} \\
-104 & 1.54{\scriptsize$\pm$0.04} & 1.54{\scriptsize$\pm$0.04} & 2.75{\scriptsize$\pm$0.06} & 26.50{\scriptsize$\pm$0.20} \\
-\textbf{107} & \textbf{2.14}{\scriptsize$\pm$0.06} & \textbf{2.14}{\scriptsize$\pm$0.06} & \multicolumn{1}{c}{N/A$^*$} & \textbf{27.00}{\scriptsize$\pm$0.20} \\
-112 & 1.53{\scriptsize$\pm$0.04} & 1.53{\scriptsize$\pm$0.04} & 2.60{\scriptsize$\pm$0.05} & 27.10{\scriptsize$\pm$0.20} \\
-128 & 1.47{\scriptsize$\pm$0.03} & 1.47{\scriptsize$\pm$0.03} & 2.55{\scriptsize$\pm$0.05} & 28.10{\scriptsize$\pm$0.20} \\
+96  & 1.17{\scriptsize$\pm$0.03} & 1.12{\scriptsize$\pm$0.02} & 2.38{\scriptsize$\pm$0.05} & 26.0{\scriptsize$\pm$0.2} \\
+104 & 1.54{\scriptsize$\pm$0.04} & 1.54{\scriptsize$\pm$0.04} & 2.75{\scriptsize$\pm$0.06} & 26.5{\scriptsize$\pm$0.2} \\
+\textbf{107} & \textbf{2.14}{\scriptsize$\pm$0.06} & \textbf{2.14}{\scriptsize$\pm$0.06} & \multicolumn{1}{c}{N/A$^*$} & \textbf{27.0}{\scriptsize$\pm$0.2} \\
+112 & 1.53{\scriptsize$\pm$0.04} & 1.53{\scriptsize$\pm$0.04} & 2.60{\scriptsize$\pm$0.05} & 27.1{\scriptsize$\pm$0.2} \\
+128 & 1.47{\scriptsize$\pm$0.03} & 1.47{\scriptsize$\pm$0.03} & 2.55{\scriptsize$\pm$0.05} & 28.1{\scriptsize$\pm$0.2} \\
 \bottomrule
 \multicolumn{5}{l}{\scriptsize $^*$MEM\_EFFICIENT unavailable: requires strict 8-alignment ($d$=107 is not 8-aligned).}
 \end{tabular}
@@ -346,13 +352,13 @@ Table~\ref{tab:applicability} provides practitioner guidance: repair helps when 
 \toprule
 Architecture Type & SDPA head\_dim & \textbf{Repair Helps?} & Validated \\
 \midrule
-\textbf{Direct compression} & \emph{Misaligned} & \colorbox{green!30}{\textbf{\large Yes}} (+25--28\%) & Kernel (\S\ref{sec:repair_validation}) \\
-(vanilla SVD, head\_dim$\to d$) & (e.g., $d$=107) & & \\
+\textbf{Direct compression} & \emph{Misaligned} & \cellcolor{green!55}\textbf{\Large YES} & Kernel (\S\ref{sec:repair_validation}) \\
+(vanilla SVD, head\_dim$\to d$) & (e.g., $d$=107) & \cellcolor{green!55}(+25--28\%) & \\
 \midrule
-\textbf{Projection-based} & \emph{Aligned} & \colorbox{red!25}{\textbf{\large No}} (--0.8\%) & E2E (\S\ref{sec:e2e_validation}) \\
-(RAP SVD, latent$\to$head\_dim) & (e.g., $d$=128) & & \\
+\textbf{Projection-based} & \emph{Aligned} & \cellcolor{red!50}\textbf{\Large NO} & E2E (\S\ref{sec:e2e_validation}) \\
+(RAP SVD, latent$\to$head\_dim) & (e.g., $d$=128) & \cellcolor{red!50}(--0.8\%) & \\
 \midrule
-\textbf{Quantization} & \emph{Unchanged} & \colorbox{gray!20}{\textbf{N/A}} & N/A \\
+\textbf{Quantization} & \emph{Unchanged} & \cellcolor{gray!40}\textbf{N/A} & N/A \\
 (GPTQ, AWQ) & & & \\
 \bottomrule
 \end{tabular}
@@ -363,6 +369,14 @@ For projection-based methods (RAP SVD, some PaLU variants), misalignment affects
 For direct compression (vanilla SVD, head\_dim replacement), kernel-level speedups translate to E2E gains.
 
 \textbf{Context}: Production PaLU checkpoints enforce 32-multiple alignment internally, achieving 11.5$\times$ decode speedup via KV cache compression~\cite{palu}---orthogonal to dimension repair.
+Figure~\ref{fig:e2e_perf} shows the end-to-end performance comparison.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig6_e2e.pdf}
+\caption{End-to-end performance: Baseline vs.\ PaLU on Llama-3-8B ($B$=4, $S$=2048). PaLU achieves \textbf{11.5$\times$ decode speedup} via KV cache compression, with minimal prefill overhead (--2\%). Since production PaLU enforces 32-multiple alignment, no dimension repair is needed.}
+\label{fig:e2e_perf}
+\end{figure}
 
 \subsection{Padding Rescue Experiment (P1)}
 \label{sec:padding}
@@ -378,9 +392,9 @@ Table~\ref{tab:padding} shows the effect of padding $d$=107 to aligned values.
 \toprule
 Phys. $d$ & Mem. Ovhd. & Latency (ms$\pm$std) & Speedup \\
 \midrule
-107 (base) & 0\% & 2.064{\scriptsize$\pm$.06} & 1.00$\times$ \\
-112 & 4.7\% & 1.490{\scriptsize$\pm$.04} & 1.39$\times$ \\
-128 & 19.6\% & 1.506{\scriptsize$\pm$.04} & 1.37$\times$ \\
+107 (base) & 0\% & 2.06{\scriptsize$\pm$0.06} & 1.00$\times$ \\
+112 & 4.7\% & 1.49{\scriptsize$\pm$0.04} & 1.39$\times$ \\
+128 & 19.6\% & 1.51{\scriptsize$\pm$0.04} & 1.37$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -415,12 +429,12 @@ Memory overhead: MINIMAL 3.72\%, OPTIMAL 7.20\%.
 \toprule
 $d$ & Original & Minimal & Optimal & $\Delta$Min & $\Delta$Opt \\
 \midrule
-107 & 2.064{\scriptsize$\pm$.06} & 1.490{\scriptsize$\pm$.04} & 1.506{\scriptsize$\pm$.04} & \textbf{+27.8\%} & +27.0\% \\
-114 & 2.049{\scriptsize$\pm$.06} & 1.549{\scriptsize$\pm$.04} & 1.432{\scriptsize$\pm$.04} & +24.4\% & \textbf{+30.1\%} \\
-117 & 2.054{\scriptsize$\pm$.06} & 1.567{\scriptsize$\pm$.04} & 1.433{\scriptsize$\pm$.04} & +23.7\% & \textbf{+30.2\%} \\
-120 & 1.557{\scriptsize$\pm$.04} & 1.557{\scriptsize$\pm$.04} & 1.428{\scriptsize$\pm$.04} & 0\% & +8.3\% \\
-121 & 1.964{\scriptsize$\pm$.05} & 1.430{\scriptsize$\pm$.04} & 1.441{\scriptsize$\pm$.04} & \textbf{+27.2\%} & +26.6\% \\
-125 & 1.975{\scriptsize$\pm$.05} & 1.439{\scriptsize$\pm$.04} & 1.439{\scriptsize$\pm$.04} & \textbf{+27.1\%} & +27.1\% \\
+107 & 2.06{\scriptsize$\pm$0.06} & 1.49{\scriptsize$\pm$0.04} & 1.51{\scriptsize$\pm$0.04} & \textbf{+27.8\%} & +27.0\% \\
+114 & 2.05{\scriptsize$\pm$0.06} & 1.55{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & +24.4\% & \textbf{+30.1\%} \\
+117 & 2.05{\scriptsize$\pm$0.06} & 1.57{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & +23.7\% & \textbf{+30.2\%} \\
+120 & 1.56{\scriptsize$\pm$0.04} & 1.56{\scriptsize$\pm$0.04} & 1.43{\scriptsize$\pm$0.04} & 0\% & +8.3\% \\
+121 & 1.96{\scriptsize$\pm$0.05} & 1.43{\scriptsize$\pm$0.04} & 1.44{\scriptsize$\pm$0.04} & \textbf{+27.2\%} & +26.6\% \\
+125 & 1.98{\scriptsize$\pm$0.05} & 1.44{\scriptsize$\pm$0.04} & 1.44{\scriptsize$\pm$0.04} & \textbf{+27.1\%} & +27.1\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -469,12 +483,15 @@ WikiText-2 perplexity validation on RAP SVD ($r$=0.8, $d$=102) confirms repair p
 \subsection{Scope and Limitations}
 \label{sec:limitations}
 
-\textbf{(1) Scope}: The 96.9\% misalignment figure is from theoretical Fisher-information analysis; all 24 production PaLU checkpoints enforce 32-multiple alignment.
-Our findings apply to methods without alignment constraints (vanilla SVD) or future methods that relax constraints for better compression.
+\begin{enumerate}
+  \item \textbf{Scope}: The 96.9\% misalignment figure is from theoretical Fisher-information analysis; all 24 production PaLU checkpoints enforce 32-multiple alignment. Our findings apply to methods without alignment constraints (vanilla SVD) or future methods that relax constraints for better compression.
 
-\textbf{(2) Downstream}: Zero-padding preserves outputs exactly; perplexity validated on RAP SVD. Comprehensive task evaluation (MMLU, etc.) is future work.
+  \item \textbf{Downstream Tasks}: Zero-padding preserves outputs exactly; perplexity validated on RAP SVD. Comprehensive task evaluation (MMLU, etc.) is future work.
 
-\textbf{(3) Hardware}: All experiments are on A100. H100+ generalization remains future work.
+  \item \textbf{Hardware Generalization}: All experiments are on A100. H100+ generalization remains future work.
+\end{enumerate}
+
+\FloatBarrier  % Contain evaluation figures/tables
 
 %% ===========================================
 %% 7. RELATED WORK
