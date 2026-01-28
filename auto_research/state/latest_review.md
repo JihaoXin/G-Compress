@@ -18,9 +18,13 @@ The work is validated through contrasting experiments: RAP SVD E2E shows -0.8% (
 
 **Rating: Weak Accept (7/10)**
 
-This is solid systems research identifying an important but overlooked GPU-compression interaction problem. The systematic three-layer diagnosis (Backend→CUDA→Hardware) is thorough, the dual validation (negative/positive E2E cases) demonstrates scientific rigor, and the applicability framework provides actionable practitioner guidance. However, significant presentation issues prevent a higher rating: Related Work is critically insufficient (31 citations, missing key comparisons), figure sizing is inconsistent (Figure 5 oversized with low information density, Figure 3 undersized for a key result), and Page 6 layout is visually crowded. With moderate revisions addressing these issues, this would be a strong EuroMLSys contribution.
+This is a solid diagnostic study with rigorous experimental methodology and practical value. The work identifies an important performance pitfall in LLM compression and provides actionable guidance. The systematic three-layer diagnosis (Backend→CUDA→Hardware) is thorough, the dual validation (RAP SVD -0.8% vs Direct SDPA +86.9%) demonstrates the framework's predictive power, and the applicability table provides genuine practitioner value.
 
-**Confidence:** 4/5
+However, it falls short of a strong accept due to: (1) **critically shallow Related Work** (~46 citations, lacking comprehensive literature coverage and critical engagement), (2) **figure sizing issues** (Figure 5 oversized at 0.75\columnwidth for 6 data points with low information density), (3) **Page 6 layout crowding** with margin violations, and (4) **limited hardware scope** (A100 only, no H100 validation despite it being the 2026 production standard).
+
+The paper would be well-suited for EuroMLSys as a systems measurement study, but needs strengthening in literature contextualization, visual presentation, and broader hardware validation to reach top-tier status.
+
+**Confidence:** 4/5 (High confidence in systems/GPU performance evaluation, some uncertainty about EuroMLSys acceptance thresholds)
 
 ---
 
@@ -28,56 +32,69 @@ This is solid systems research identifying an important but overlooked GPU-compr
 
 | Dimension | Weight | Score | Weighted |
 |-----------|--------|-------|----------|
-| Technical Quality | 40% | 7.5/10 | 3.00 |
-| Paper Presentation | 30% | 6.0/10 | 1.80 |
-| Innovation | 20% | 7.5/10 | 1.50 |
-| Writing Quality | 10% | 7.0/10 | 0.70 |
-| **Total** | 100% | - | **7.0/10** |
+| Technical Quality | 40% | 8.0/10 | 3.20 |
+| Paper Presentation | 30% | 6.5/10 | 1.95 |
+| Innovation | 20% | 6.5/10 | 1.30 |
+| Writing Quality | 10% | 8.0/10 | 0.80 |
+| **Total** | 100% | - | **7.25/10** |
+
+**Rounded Overall Rating: 7.0/10** (Weak Accept)
 
 ---
 
 ## Bottleneck Analysis (REQUIRED)
 
-**主要瓶颈维度**: Paper Presentation
+**主要瓶颈维度**: Paper Presentation (6.5/10)
 
-**瓶颈分数**: 6.0/10
+**瓶颈分数**: 6.5/10
 
 **为什么是瓶颈**:
 
-Paper Presentation (6.0) 是唯一低于 7.0 的维度，显著拖累整体评分。尽管 Technical Quality (7.5) 和 Innovation (7.5) 已达到良好水平，但视觉呈现问题削弱了论文的影响力。具体问题包括：
+Paper Presentation is the primary bottleneck preventing this paper from reaching 8/10 (Accept). Despite strong technical execution (8.0/10), the visual presentation has multiple critical issues:
 
-1. **Related Work 严重不足** - 仅 31 篇引用，EuroMLSys 标准应≥45 篇。缺少与 GPTQ、AWQ、H2O 等关键方法的对比，未引用使用的 lm-eval-harness 工具。
-2. **Figure 尺寸不当** - Figure 5 (2x2 repair tradeoff) 占据 0.75\columnwidth 但仅展示 8 个数据点，信息密度过低；Figure 3 (PaLU distribution) 只有 0.85\columnwidth 导致关键结果 "96.9% misaligned" 的百分比标签 <7pt 难以辨认。
-3. **视觉拥挤** - Page 6 在 Figure 5 + Table 7 + Related Work 密集文字三者挤压下显得混乱，缺少呼吸空间。
-4. **布局冲突** - Figure 1 caption 与 figure 间距 <2mm；Figure 3 与 Section 3.2 标题间距 <3mm；Page 6 底部有大片空白未利用。
+1. **Related Work severely underdeveloped** - Only ~46 citations (counted in references), far below EuroMLSys standards (60-70 typical). Missing comprehensive compression surveys, GPU optimization methodology papers, historical HPC alignment literature, and critical engagement with prior work.
+
+2. **Figure sizing problems** - Figure 5 occupies 0.75\columnwidth but shows only 6 data points with significant empty space (low information density). This wastes precious space in a 6-page format.
+
+3. **Page 6 crowding and margin violations** - Visual inspection reveals Figure 5's left edge is < 2mm from column boundary (invades margin), insufficient spacing between Figure 5 and Table 6 (< 3mm), creating a cramped appearance.
+
+4. **Information density imbalance** - Page 8 has ~95% blank space after Conclusion ends, while Page 6 is severely crowded. Better space redistribution needed.
+
+These presentation issues, combined with shallow Related Work, create a perception of incomplete scholarly depth that holds the paper back from strong accept status.
 
 **突破方向**:
 
-Presentation 是最容易突破的瓶颈，因为：
-- Technical content 已经 solid，不需要新实验
-- 问题是可操作的：调整 figure 尺寸、补充引用、优化布局
-- 修复成本低于提升 Technical Quality (需要新实验) 或 Innovation (需要重新 frame)
+To elevate this paper from 7.0 → 8.0+, focus on:
+
+1. **IMMEDIATE: Expand Related Work** (HIGHEST PRIORITY) - Add 15-20 high-quality citations:
+   - Comprehensive LLM compression survey papers (recent MLSys/NeurIPS)
+   - GPU kernel optimization literature beyond FlashAttention
+   - Systems profiling methodology papers
+   - Historical context on memory alignment in HPC (20+ years of prior work)
+   - Critical engagement: explain WHY prior work missed dimensional collapse
+
+2. **HIGH PRIORITY: Fix Page 6 layout** - Reduce Figure 5 width (0.75→0.6\columnwidth), add vertical spacing, ensure no margin violations
+
+3. **MEDIUM PRIORITY: Improve figure information density** - Shrink oversized figures, tighten axis ranges to reduce whitespace
 
 **给 Planner 的建议**:
 
-1. **LITERATURE_EXPANSION** (HIGH priority):
-   - 补充 15+ 高影响力引用（GPTQ, AWQ, H2O, QUEST, lm-eval-harness, GPU whitepapers）
-   - 添加对比表格：Method | Compression Type | Dimension Handling | Applicability
-   - 扩展 Related Work 至 0.8-1.0 页
+Since the paper has been stuck at 7.0/10 for 47 iterations with repeated WRITING_ONLY and FIGURE_CODE_REQUIRED tasks, **it's time to break the cycle with a fundamentally different approach**:
 
-2. **FIGURE_CODE_REQUIRED** (MEDIUM priority):
-   - Figure 5: width 0.75→0.45\columnwidth（节省空间，信息密度提升）
-   - Figure 3: width 0.85→1.0\columnwidth（放大关键结果，提升可读性）
-   - Figure 1: 精简 caption 至 5 行以内，增加与 figure 底部间距
+1. **LITERATURE_EXPANSION task** (REQUIRED): Add 15-20 high-quality citations with critical discussion. Focus on:
+   - LLM compression surveys (recent MLSys/NeurIPS papers)
+   - GPU optimization methodology papers
+   - Systems measurement studies (reference papers from OSDI/SOSP)
+   - Historical HPC alignment literature
 
-3. **WRITING_ONLY** (LOW priority):
-   - 删除 Table 7（与 Table 6 数据重复）节省 Page 6 空间
-   - 在 Section 7 前添加 \clearpage 或移动 Table 7 至 float page
-   - 统一术语：全文使用 "head dimension" 而非 "head_dim"
+2. **LAYOUT_OPTIMIZATION task** (REQUIRED): Systematically fix all visual issues identified in the review:
+   - Reduce Figure 5 width from 0.75→0.6\columnwidth
+   - Fix Page 6 spacing (increase \floatsep, check margins)
+   - Ensure all figures use consistent sizing
 
-**不应采取的行动**:
-- ❌ EXPERIMENT_REQUIRED - 实验数据已充分支撑结论
-- ❌ 大幅重写 - 当前逻辑清晰，仅需局部优化
+3. **Consider H100 validation** (OPTIONAL but HIGH IMPACT): Even preliminary H100 results would significantly strengthen the Innovation score
+
+**Do NOT repeat generic WRITING_ONLY tasks** - they have demonstrably failed 47 times. The bottleneck is specific: literature depth and layout quality.
 
 ---
 
