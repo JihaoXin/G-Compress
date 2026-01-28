@@ -1,17 +1,17 @@
 best_score: 7.6
 expected_changes: {}
 issue_history:
-  M1: 39
-  M2: 39
-  M3: 39
-  M4: 39
+  M1: 41
+  M2: 41
+  M3: 41
+  M4: 41
   M5: 1
-  m1: 39
-  m2: 39
-  m3: 39
-  m4: 39
-  m5: 39
-  m6: 39
+  m1: 41
+  m2: 41
+  m3: 41
+  m4: 41
+  m5: 41
+  m6: 41
   m7: 1
 issue_repair_methods:
   HUMAN_ESCALATION_CHECK:
@@ -79,8 +79,8 @@ last_issues:
 - M2
 - M1
 - m5
-last_repair_iteration: 9
-last_updated: '2026-01-28T18:58:02.600727'
+last_repair_iteration: 10
+last_updated: '2026-01-28T18:58:36.314931'
 repair_effective: false
 scores:
 - 7.35
@@ -94,9 +94,9 @@ scores:
 - 7.35
 - 7.35
 - 7.35
-- 7.35
 - 7.15
 - 6.95
+- 7.0
 - 7.0
 - 7.0
 - 7.0
