@@ -1,21 +1,26 @@
 best_score: 7.6
 expected_changes: {}
 issue_history:
-  M1: 25
-  M2: 25
-  M3: 25
-  M4: 25
-  m1: 25
-  m2: 25
-  m3: 25
-  m4: 25
-  m5: 25
-  m6: 25
+  M1: 27
+  M2: 27
+  M3: 27
+  M4: 27
+  M5: 1
+  m1: 27
+  m2: 27
+  m3: 27
+  m4: 27
+  m5: 27
+  m6: 27
   m7: 1
 issue_repair_methods:
+  M1:
+  - FIGURE_CODE_REQUIRED
   M1_SCOPE_CLARIFICATION:
   - WRITING_ONLY
   M1_SCOPE_FINAL_CHECK:
+  - WRITING_ONLY
+  M2:
   - WRITING_ONLY
   M2_E2E_VALIDATION_CHECK:
   - WRITING_ONLY
@@ -23,9 +28,13 @@ issue_repair_methods:
   - EXPERIMENT_REQUIRED
   M2_REFRAME_E2E:
   - WRITING_ONLY
+  M3:
+  - LITERATURE_REQUIRED
   M3_FIGURE_CODE_ANALYSIS:
   - FIGURE_CODE_REQUIRED
   M3_FIGURE_SIZE_LATEX:
+  - FIGURE_CODE_REQUIRED
+  M4:
   - FIGURE_CODE_REQUIRED
   M4_TABLE3_VISUAL:
   - WRITING_ONLY
@@ -33,7 +42,19 @@ issue_repair_methods:
   - WRITING_ONLY
   VISIBILITY_PACKAGE:
   - WRITING_ONLY
+  m1:
+  - WRITING_ONLY
+  m2:
+  - WRITING_ONLY
+  m3:
+  - WRITING_ONLY
+  m4:
+  - WRITING_ONLY
   m4_SUMMARY_BOX_CHECK:
+  - WRITING_ONLY
+  m5:
+  - WRITING_ONLY
+  m6:
   - WRITING_ONLY
 last_issues:
 - m2
@@ -43,11 +64,12 @@ last_issues:
 - M4
 - m4
 - m6
+- M5
 - M2
 - M1
 - m5
-last_repair_iteration: 2
-last_updated: '2026-01-28T17:31:21.254987'
+last_repair_iteration: 3
+last_updated: '2026-01-28T18:06:57.052731'
 repair_effective: false
 scores:
 - 7.35
@@ -68,6 +90,6 @@ scores:
 - 7.35
 - 7.35
 - 7.35
-- 7.35
 - 7.15
+- 6.95
 stagnation_count: 1
