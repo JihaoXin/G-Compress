@@ -1,446 +1,458 @@
 # Meta-Debugger 诊断报告
 
-**诊断时间**: 2026-01-29T15:47:09
+**诊断时间**: 2026-01-29T22:05:00 (UTC+8)
 **触发原因**: stagnation (3 iterations)
-**系统健康状态**: **CRITICAL**
-
-**症状汇总**:
-- 停滞计数: 3 (最近 6 次分数波动仅 0.15)
-- 高重复 issues: M1-M4, m1-m6 均重复 7 次
-- 分数: 6.85/10 (从最高 7.6 下降 0.75 分)
-- 修复无效: Issues M1, M2, M3 仍在重复出现
+**系统健康状态**: **WARNING** (停滞 + 执行验证脱节)
 
 ---
 
-## 🔴 检测到的问题
+## 执行摘要
 
-### 问题 1: **策略升级逻辑失效** [HIGH SEVERITY]
+系统在最近 4 次迭代陷入停滞（分数 7.0 → 7.0 → 6.8 → 7.0 → 6.95），连续 3 次无有效进步。经全面诊断，**问题根因不是框架设计缺陷，而是执行层面的验证断裂**：
 
-**现象**:
-- Memory 中所有 issues (M1-M4, m1-m6) 均重复 7 次
-- 但 Planner 仍然在使用被 Memory 禁用的方法
-- 日志显示多次 "🚫 违规" 警告，但最终仍被放行执行
+1. **执行验证脱节** (Critical): Python 代码被大幅修改（34.5KB diff），但 LaTeX 的 `\includegraphics width` 参数**未同步更新**，导致核心问题 M2 (Figure 尺寸过大) 未真正解决
+2. **Validator 误报** (High): Validator 报告 FAIL 但基于的是**旧版 validation_report.md** (2026-01-28)，而非当前迭代的实际修改
+3. **策略循环陷阱** (Medium): 10 个 issues 全部重复 4 次，但系统已正确分配方法（M2, m2: FIGURE_CODE），只是执行断裂
+4. **Memory 建议与 Review 冲突** (Low): Memory 基于历史失败建议部分 issue 使用 LITERATURE，但 Review 明确指出应使用 FIGURE_CODE
 
-**根因分析**:
-Memory.py 中的 `get_banned_methods()` 逻辑存在**问题类型分类失败**:
-1. **问题**: Memory 使用关键词匹配来分类 issue 类型 (lines 246-266)
-2. **失败模式**: 对于像 "M1: Related Work 文献深度和批判性不足" 这样的 issue，虽然包含 "related work" 和 "citation" 关键词（应判定为 presentation），但因为 issue 描述中可能包含 "depth" 或其他技术术语，导致分类不准确
-3. **后果**: 所有 issues 被错误分类或分类逻辑被 orchestrator 忽略
+**关键发现**: 系统架构**健康**，问题出在**Writer agent 未完整执行 FIGURE_CODE 任务**：
+- ✅ Planner 正确分配了 M2: FIGURE_CODE_REQUIRED (缩小图表)
+- ✅ Python 代码被修改 (字体大小 9pt → 11pt)
+- ❌ LaTeX width 参数未修改 (仍然是 0.4, 0.35, 0.4 columnwidth)
+- ❌ Page 6 拥挤问题未解决
 
-**证据**:
-```python
-# memory.py line 268
-def get_banned_methods(self, issue_id: str, issue_description: str = "") -> List[str]:
-    issue_type = self.classify_issue_type(issue_description)
-
-    # PRESENTATION 问题：循环使用方法，不强制 EXPERIMENT
-    if issue_type == "presentation":
-        # ...仅轻度禁用某些方法
-        return []  # 大部分情况返回空列表！
-```
-
-**日志证据** (from AutoGAC_paper_20260129_150433.log):
-```
-[15:34:58] 🚫 违规: m3 使用了被禁用的方法 WRITING_ONLY！
-[15:34:58] 🚫 违规: m4 使用了被禁用的方法 WRITING_ONLY！
-[15:34:58] 💡 检测到可能的策略改进建议
-[15:34:58]   m3: 展示问题，WRITING_ONLY 可能合适，继续执行
-```
-
-**为什么会发生**:
-Orchestrator.py 中有"宽容模式"，即使检测到违规也会放行 (auto_research/orchestrator.py)。这本意是避免过度限制，但实际导致 Memory 的策略升级完全失效。
-
-**影响**:
-- 系统陷入死循环：Memory 标记问题 → Planner 生成禁用方法的计划 → Orchestrator 放行 → 修复失败 → Memory 再次标记 → 循环
-- 7 次重复尝试同样的方法组合 (WRITING_ONLY × 3, FIGURE_CODE × 2, etc.)
-- 分数从 7.6 降至 6.85，损失 0.75 分
-
-**修复方案**:
-```python
-# 修改 1: memory.py get_banned_methods() 增加严格模式
-def get_banned_methods(self, issue_id: str, issue_description: str = "") -> List[str]:
-    count = self.get_issue_count(issue_id)
-    tried = self.get_tried_methods(issue_id)
-
-    # 新逻辑：不依赖关键词分类，直接看尝试历史
-    # 如果任何方法被尝试 3+ 次，都应该禁用
-    method_counts = {}
-    for m in tried:
-        method_counts[m] = method_counts.get(m, 0) + 1
-
-    banned = []
-    for method, tries in method_counts.items():
-        if tries >= 3:
-            banned.append(method)
-
-    # 如果重复 7+ 次，禁用所有非 EXPERIMENT 方法
-    if count >= 7:
-        return ["WRITING_ONLY", "FIGURE_CODE_REQUIRED", "LITERATURE_REQUIRED"]
-
-    return banned
-```
-
-**预期效果**:
-- 强制 Planner 在 7 次重复后必须使用 EXPERIMENT_REQUIRED
-- 打破当前的死循环
-- 引入新的数据/证据来突破停滞
+**结论**: 需要 **P0 紧急修复 LaTeX width 参数**，然后系统可恢复正常迭代。
 
 ---
 
-### 问题 2: **执行一致性脱节** [MEDIUM SEVERITY]
+## 检测到的问题
 
-**现象**:
-- Action plan 声称要进行 "Literature expansion with 30+ new citations"
-- 实际执行：只添加了 5 个新 BibTeX 条目 (从 46 增至 71，增加 25 个，但检查 git diff 只看到部分)
-- Related Work 从 0.8 pages 扩展到约 1.0 pages（目标是 2.0 pages）
+### 问题 1: 执行验证脱节 - Python 改了，LaTeX 未改 ★★★ CRITICAL
 
-**根因分析**:
-1. **任务拆分过细**: Literature task 被拆成 3 个 steps (fetch, write, add bibtex)，但 Writer agent 只完成了部分
-2. **没有验证机制**: Orchestrator 没有检查 Related Work 章节是否真的扩展到了 2.0 pages
-3. **增量修改而非重写**: Writer 采用了"增量添加引用"而非"完全重写章节"策略
+- **严重程度**: **CRITICAL**
+- **现象**:
+  1. `scripts/create_paper_figures.py` 被大幅修改（34.5KB diff，字体 8-9pt → 10-11pt）
+  2. 但 `Latex/main.tex` 的 `\includegraphics[width=X\columnwidth]` 参数**完全未修改**
+  3. Review 明确要求 "Reduce Fig 1: 0.4→0.3, Fig 3: 0.35→0.25, Fig 5: 0.4→0.3"
+  4. M2 (Figure 尺寸过大导致 Page 6 拥挤) 未解决
 
-**证据**:
-```bash
-# 从 git diff Latex/references.bib 看到只添加了少量条目（HARDWARE-AWARE COMPRESSION 部分）
-# 但 action_plan.yaml 承诺添加 30+ 条目
-```
+- **根因分析**:
+  Writer agent 混淆了两个不同的任务：
+  - **任务 A (正确理解)**: 修改 Python 代码提高字体大小 → 改善图表可读性
+  - **任务 B (未理解)**: 修改 LaTeX `\includegraphics width` 参数 → 缩小图表占用空间
 
-**检查 Related Work 实际长度**:
-```bash
-# 从 Latex/main.tex line 537-636，Related Work 实际约 100 lines
-# 对应大约 1.0-1.2 pages（两栏格式）
-# 远未达到目标的 2.0 pages
-```
+  Writer 完成了任务 A（提高字体），但**没有完成任务 B**（缩小尺寸）。
+  这是典型的"任务理解偏差"——agent 找到了*一种*改善图表质量的方法，就认为完成了任务。
 
-**为什么会发生**:
-Writer agent 可能因为以下原因只做了部分工作：
-- Prompt 太复杂，agent 选择了简化版本
-- 时间限制（每个 agent 有执行时间限制）
-- 误解了"expansion"的含义（以为是添加几段即可，而非完全重写）
+- **证据**:
 
-**影响**:
-- Literature task 标记为 "completed"，但实际只完成了 40-50%
-- Reviewer 下次仍会指出 "Related Work sparse"（M2 会继续重复）
-- 分数没有预期的 +0.5-0.8 提升
+  **git diff scripts/create_paper_figures.py (部分)**:
+  ```diff
+  +# REVIEWER FIX M3: All fonts must be 8pt minimum for print readability
+  +# Using 10pt+ as minimum to ensure clear readability
+   plt.rcParams.update({
+       'font.family': 'serif',
+  -    'font.size': 9,
+  +    'font.size': 11,           # Base font size (9 → 11)
+  -    'axes.labelsize': 10,
+  +    'axes.labelsize': 12,      # (10 → 12)
+  ```
 
-**修复方案**:
-```python
-# 修改 1: orchestrator.py 添加验证步骤
-def verify_literature_expansion(self, target_file, expected_sections):
-    """验证 Related Work 是否真的扩展了"""
-    content = Path(target_file).read_text()
+  **git diff Latex/main.tex (检查 includegraphics)**:
+  ```bash
+  $ git diff Latex/main.tex | grep -A2 -B2 "includegraphics.*figures/fig[135]"
+  # 结果：0 行输出
+  # 说明：没有修改任何 includegraphics width 参数！
+  ```
 
-    # 检查关键子章节是否存在
-    for section in expected_sections:
-        if section not in content:
-            return False, f"Missing subsection: {section}"
+  **Review 的明确要求 (latest_review.md L162-169)**:
+  ```markdown
+  **Suggested Fix** (REQUIRES FIGURE_CODE modification):
+  1. Edit `scripts/create_paper_figures.py`:
+     - `fig1_overview.pdf`: Reduce width 0.4→0.3
+     - `fig3_palu_dist.pdf`: Reduce width 0.35→0.25
+     - `fig5_repair_tradeoff.pdf`: Reduce width 0.4→0.3
+  2. Regenerate PDFs and recompile LaTeX
+  3. Verify Page 6 now has breathing room (~10-15% more space)
+  ```
 
-    # 检查长度
-    related_work = extract_section(content, "Related Work")
-    line_count = len(related_work.split('\n'))
-    if line_count < 150:  # 2 pages ≈ 150-180 lines
-        return False, f"Related Work too short: {line_count} lines (need 150+)"
+  **Action Plan 的任务描述 (action_plan.yaml L41-49)**:
+  ```yaml
+  - step: 3
+    agent: writer
+    task: |
+      修改 Latex/main.tex 中对应的 LaTeX 代码，调整 includegraphics 的 width 参数：
+      1. Figure 1 (约 line 129): \includegraphics[width=0.4\columnwidth] → width=0.3\columnwidth
+      2. Figure 3 (约 line 199): \includegraphics[width=0.35\columnwidth] → width=0.25\columnwidth
+      3. Figure 5 (约 line 480): \includegraphics[width=0.4\columnwidth] → width=0.3\columnwidth
+  ```
 
-    return True, "Verified"
-```
+  **Writer 实际做了什么**:
+  - ❌ 未修改 LaTeX 的 includegraphics width 参数（任务 step 3 未执行）
+  - ✓ 修改了 Python 字体大小（改善可读性，但不是主要目标）
+  - ❌ M2 核心问题"Figure 占用空间过大"未解决
 
-**预期效果**:
-- 发现执行不完整时自动重试
-- 确保承诺的改进真正落实
-- 避免虚假的 "completed" 标记
+- **影响**:
+  - M2 (Presentation 瓶颈) 未解决 → 分数无法提升
+  - Page 6 拥挤问题依然存在 → Reviewer 下次会继续指出
+  - 浪费了 1 次迭代（分数从 6.8 → 6.95，仅+0.15，远低于预期的 +0.5）
 
----
+- **修复方案**:
 
-### 问题 3: **Literature Task 执行模式错误** [HIGH SEVERITY]
+  **方案 A (立即执行 - 推荐)**: 手动修复 LaTeX width 参数
+  ```latex
+  # 修改 Latex/main.tex 的 3 处
 
-**现象**:
-- M1 task 计划是 "LITERATURE_REQUIRED: 添加 30+ 新引用 + 完全重写 Related Work"
-- 实际执行：Literature agent 被调用 2 次，Writer agent 被调用 2 次
-- 但最终只添加了约 5-10 个新引用，Related Work 只略微扩展
+  # Line ~129 (Figure 1)
+  - \includegraphics[width=0.4\columnwidth]{figures/fig1_overview.pdf}
+  + \includegraphics[width=0.3\columnwidth]{figures/fig1_overview.pdf}
 
-**根因分析**:
-这是最关键的问题。检查 action_plan.yaml 可以看到：
+  # Line ~199 (Figure 3)
+  - \includegraphics[width=0.35\columnwidth]{figures/fig3_palu_dist.pdf}
+  + \includegraphics[width=0.25\columnwidth]{figures/fig3_palu_dist.pdf}
 
-```yaml
-- agent: literature
-  task: "从 literature.yaml 中提取以下论文的 BibTeX..."
-  expected_output: "准备好的 BibTeX 条目列表（30+ 条目）"
+  # Line ~480 (Figure 5)
+  - \includegraphics[width=0.4\columnwidth]{figures/fig5_repair_tradeoff.pdf}
+  + \includegraphics[width=0.3\columnwidth]{figures/fig5_repair_tradeoff.pdf}
 
-- agent: writer
-  task: "**MAJOR REWRITE: Expand Related Work from 0.8 pages to 2.0 pages**"
-  expected_output: "Latex/main.tex §7 Related Work 完全重写: 5 个 \subsection{}"
-```
+  # 然后重新编译
+  cd Latex && pdflatex main.tex && pdflatex main.tex
+  ```
 
-**问题**:
-1. Literature agent 的输出是"准备 BibTeX"，但没有**强制 Writer 使用所有条目**
-2. Writer 收到的 task 是"完全重写"，但没有**验证是否真的重写了**
-3. 没有中间检查点确认 literature agent 的输出是否被 writer 接收
+  **方案 B (框架修复)**: 增强 Writer agent prompt 的任务验证清单
+  ```markdown
+  # auto_research/agents/writer.prompt (新增)
 
-**为什么这是系统性失败**:
-这不是单个 agent 的问题，而是 **agent 之间的信息传递失败**：
-- Literature agent 可能准备了 30 个 BibTeX 条目
-- 但 Writer agent 没有收到这些条目（或选择忽略了）
-- Orchestrator 没有检查 step 1 的输出是否被 step 2 使用
+  ## FIGURE_CODE_REQUIRED 任务执行清单
 
-**证据**:
-从 git diff 看，references.bib 只添加了少量条目（约 5-10 个），而不是承诺的 30+。
+  当任务涉及"缩小图表"或"调整图表占用空间"时，必须完成 3 个步骤：
 
-**影响**:
-- M1 被标记为 "completed"，但实际完成度 <50%
-- 分数没有提升（期望 7.5-7.8，实际 6.85）
-- 下一次 review 会再次指出同样的问题
+  ### Step 1: 修改 Python 绘图脚本
+  - [ ] 找到对应函数 (fig1_overview, fig3_palu_distribution, fig5_repair_tradeoff)
+  - [ ] 修改 `figsize=(width, height)` 参数（可选）
+  - [ ] 修改字体大小以适应缩小后的尺寸（如果需要）
 
-**修复方案**:
+  ### Step 2: 修改 LaTeX 主文件 ★★★ CRITICAL
+  - [ ] 找到 `\includegraphics[width=X\columnwidth]{figures/figN_xxx.pdf}`
+  - [ ] 修改 width 参数（如 0.4 → 0.3）
+  - [ ] **注意**: 这是缩小图表占用空间的关键步骤，不能跳过！
 
-**方案 A: 修改 Orchestrator 的 task chaining 逻辑**
-```python
-# orchestrator.py 添加 step output validation
-def execute_literature_task(self, task):
-    # Step 1: Literature agent 准备条目
-    lit_output = run_agent("literature", task.step1)
+  ### Step 3: 验证修改
+  - [ ] 运行 `git diff scripts/create_paper_figures.py` 确认 Python 修改
+  - [ ] 运行 `git diff Latex/main.tex | grep includegraphics` 确认 LaTeX 修改
+  - [ ] 如果 LaTeX 未修改，任务失败，必须重新执行！
 
-    # 验证输出
-    bibtex_count = lit_output.count("@article") + lit_output.count("@inproceedings")
-    if bibtex_count < 25:
-        raise ValueError(f"Literature agent only prepared {bibtex_count} entries, need 30+")
+  **关键提示**: "缩小图表"的主要方法是修改 LaTeX width 参数，而不是修改 Python 代码！
+  ```
 
-    # Step 2: Writer agent 使用这些条目
-    writer_task = task.step2 + f"\n\nUSE THE FOLLOWING BIBTEX ENTRIES:\n{lit_output}"
-    writer_output = run_agent("writer", writer_task)
+  **方案 C (Orchestrator 验证)**: 添加自动检查
+  ```python
+  # auto_research/orchestrator.py (FIGURE_CODE_REQUIRED 任务完成后)
 
-    # 验证 Writer 真的使用了
-    verify_bibtex_integration(writer_output, bibtex_count)
-```
+  def verify_figure_code_task(self, issue_id, expected_changes):
+      """验证 FIGURE_CODE 任务是否真正完成"""
+      if "缩小" in issue_description or "尺寸" in issue_description:
+          # 检查 LaTeX 是否修改了 includegraphics
+          latex_diff = subprocess.run(
+              ["git", "diff", "Latex/main.tex"],
+              capture_output=True, text=True
+          ).stdout
 
-**方案 B: 简化为单 agent 完成**
-```python
-# 不要拆分成 Literature + Writer，让 Writer 直接完成整个任务
-task = """
-直接修改 Latex/main.tex 和 references.bib：
-1. 从 auto_research/state/literature.yaml 读取所有 bibtex 条目
-2. 添加 30+ 条目到 references.bib
-3. 完全重写 §7 Related Work（5 个 subsections，2.0 pages）
-4. 确保所有新引用都被引用到（\cite{} 命令）
+          if "includegraphics" not in latex_diff:
+              logger.warning(f"❌ {issue_id}: LaTeX width 未修改，任务未完成！")
+              return False
 
-CRITICAL: 不要只添加几个引用就停止。必须完成所有 30+ 条目的添加。
-"""
-```
+          # 检查具体的 width 参数是否变小
+          if "width=0.3" in latex_diff or "width=0.25" in latex_diff:
+              logger.info(f"✓ {issue_id}: LaTeX width 已缩小")
+              return True
 
-**预期效果**:
-- 打破 agent 之间的信息孤岛
-- 确保 Literature task 真正完成
-- 分数能够达到预期的 7.5+
+      return True  # 其他类型任务默认通过
+  ```
 
----
-
-### 问题 4: **Figure Code 修改无验证** [MEDIUM SEVERITY]
-
-**现象**:
-- m1, m2, m3, m4, m5, m6 均为 FIGURE_CODE_REQUIRED 或 WRITING_ONLY
-- 每次都标记为 "completed"
-- 但 reviewer 下次仍然指出同样的问题（如 "Figure 2 字体过小"）
-
-**根因分析**:
-1. Writer 修改了 scripts/create_paper_figures.py
-2. Orchestrator 运行了重新生成 figures 的命令
-3. **但没有验证生成的 PDF 是否真的解决了问题**
-
-**证据**:
-```bash
-# 从 git status 看到 figures 被修改
-M Latex/figures/fig2_sdpa_latency.pdf
-M Latex/figures/fig2_sdpa_latency.png
-
-# 但没有检查 fig2 的字体大小是否真的增加了
-```
-
-**为什么会发生**:
-缺少视觉验证机制：
-- 没有 OCR 或图像分析来检查字体大小
-- 没有人工 checkpoint（"请确认 Figure 2 字体是否可读"）
-- Validator agent 只检查文本，不检查图片
-
-**影响**:
-- Figure 问题可能根本没被修复（只是代码被修改了）
-- Reviewer 下次会重复指出同样的问题
-- 浪费了多次迭代
-
-**修复方案**:
-
-**方案 A: 添加自动验证脚本**
-```python
-# scripts/verify_figure_metrics.py
-def check_figure_font_size(figure_path):
-    """检查 PDF 中的最小字体大小"""
-    # 使用 PyPDF2 或 pdfplumber 解析
-    min_font = extract_min_font_size(figure_path)
-    if min_font < 7:
-        return False, f"Font too small: {min_font}pt (need 7+)"
-    return True, "OK"
-```
-
-**方案 B: 生成对比报告**
-```bash
-# 自动对比修改前后的 figures
-compare_images Latex/figures/fig2_sdpa_latency.png HEAD~1:Latex/figures/fig2_sdpa_latency.png
-# 输出 diff 图或指标
-```
-
-**方案 C: 添加 manual checkpoint**
-在 orchestrator 中，FIGURE_CODE 任务完成后：
-```python
-if task.type == "FIGURE_CODE_REQUIRED":
-    print("Figures regenerated. Please visually inspect:")
-    for fig in modified_figures:
-        print(f"  - {fig}")
-    response = input("Do figures look correct? (y/n): ")
-    if response != 'y':
-        raise ValueError("Figure verification failed")
-```
-
-**预期效果**:
-- 确保 Figure 修改真正解决了问题
-- 避免虚假的 "completed"
-- 节省迭代次数
+- **预期效果**:
+  - **立即修复 (方案 A)**: Page 6 释放 10-15% 空间，M2 解决，Presentation 分数 6.0 → 6.8+
+  - **框架修复 (方案 B+C)**: 防止future iterations 出现同样问题
+  - **分数提升**: 预计下次迭代 6.95 → 7.4-7.6 (+0.45-0.65)
 
 ---
 
-### 问题 5: **Memory issue_history 计数器累积错误** [LOW SEVERITY but PERSISTENT]
+### 问题 2: Validator 报告基于旧数据 ★★ HIGH
 
-**现象**:
-所有 issues 都显示重复 7 次，但可能部分是因为**计数器没有在问题解决后重置**。
+- **严重程度**: **HIGH**
+- **现象**: Validator 在 22:00:17 报告 FAIL，但引用的 validation_report.md 时间戳是 2026-01-28 17:03
+- **根因分析**:
+  1. Validator 读取了 `auto_research/state/validation_report.md` (旧文件)
+  2. 而非基于当前迭代的实际 git diff 生成新报告
+  3. 导致误报 FAIL（旧报告的 issue 在本次迭代确实未完全解决，但原因是问题 1）
 
-**根因分析**:
-Memory.py 的 `record_issues()` 逻辑 (lines 186-210):
-```python
-def record_issues(self, issues: List[str], iteration: int):
-    # 检查上次修复是否有效
-    repeat_issues = set(issues) & set(self.last_issues)
-    if repeat_issues:
-        self.repair_effective = False
-        for issue_id in repeat_issues:
-            self.issue_history[issue_id] = self.issue_history.get(issue_id, 0) + 1
+- **证据**:
+  ```bash
+  $ ls -la auto_research/state/validation_report.md
+  -rw-rw-r-- 1 xinj g-xinj 22465 Jan 28 17:03 validation_report.md
+  # 但当前迭代是 Jan 29 22:00，相差 29 小时
 
-    # 更新 issue 历史
-    for issue_id in issues:
-        self.issue_history[issue_id] = self.issue_history.get(issue_id, 0) + 1
-```
+  # Log 显示 (line 164-166)
+  ┌─ VALIDATOR Summary ─────────────────────────────────┐
+  │ Result: FAIL                                         │
+  └──────────────────────────────────────────────────────┘
+  ```
 
-**问题**:
-如果一个 issue 在本次出现但上次也出现，它会被计数 **2 次**（一次在 repeat_issues 分支，一次在最后的 for 循环）！
+  **旧 validation_report.md 的预估 (L282-286)**:
+  ```markdown
+  ## 3. Score Projection
+  - 上次评分: 7.35/10
+  - 预估新评分: 7.7-7.9/10  # ← 这是基于假设 M2 解决的预估
+  - 变化: +0.35 to +0.55
+  ```
 
-**影响**:
-- 计数器膨胀速度是实际的 2 倍
-- 7 次重复可能实际只有 3-4 次真正重复
-- 导致过早触发 Meta-Debugger
+  **但实际评分**: 6.95/10（远低于预估的 7.7）
 
-**修复方案**:
-```python
-def record_issues(self, issues: List[str], iteration: int):
-    # 检查上次修复是否有效
-    repeat_issues = set(issues) & set(self.last_issues)
-    if repeat_issues:
-        self.repair_effective = False
-    else:
-        self.repair_effective = True
+  **为什么**:
+  - Validator 假设 M2 (Figure 尺寸) 已解决 → 预估 +0.5
+  - 但实际 LaTeX width 未修改 → M2 未解决 → 分数无提升
 
-    # 更新 issue 历史（只计数一次）
-    for issue_id in issues:
-        if issue_id in repeat_issues:
-            # 重复出现的 issue 增加计数
-            self.issue_history[issue_id] = self.issue_history.get(issue_id, 0) + 1
-        else:
-            # 新 issue 初始化为 1
-            self.issue_history[issue_id] = 1
+- **影响**:
+  - Memory 记录了 `repair_effective=False`（基于误报）
+  - Orchestrator 认为本次迭代失败
+  - 但实际问题是**执行未完成**，而非策略错误
 
-    self.last_issues = issues
-    self.save()
-```
+- **修复方案**:
 
-**预期效果**:
-- 修正计数器逻辑
-- 更准确地反映真实重复次数
-- 需要配合 soft_reset 将当前计数从 7 降到 3-4
+  **方案 A (立即修复)**: 删除旧的 validation_report.md
+  ```bash
+  rm auto_research/state/validation_report.md
+  # 强制 Validator 下次生成新报告
+  ```
+
+  **方案 B (框架修复)**: 修改 Orchestrator 逻辑
+  ```python
+  # auto_research/orchestrator.py (Phase 5: Validate)
+
+  # 当前逻辑（有问题）:
+  validator_result = run_agent("validator", "验证论文改进是否符合审稿要求")
+
+  # 修复后逻辑:
+  validation_report_path = STATE_DIR / f"validation_report_iter{iteration_num}.md"
+
+  validator_prompt = f"""验证论文改进是否符合审稿要求
+
+  **当前迭代信息**:
+  - Iteration: {iteration_num}
+  - Review issues: {[issue['id'] for issue in latest_review['issues']]}
+  - Expected changes: {memory.expected_changes}
+
+  **验证方法**:
+  1. 读取当前 git diff:
+     - Latex/main.tex
+     - scripts/create_paper_figures.py
+     - Latex/references.bib
+  2. 逐个检查 review issues 是否被修改解决
+  3. **不要依赖旧的 validation_report.md 文件**
+
+  **生成新报告**: {validation_report_path}
+  """
+  validator_result = run_agent("validator", validator_prompt)
+  ```
+
+- **预期效果**:
+  - Validator 基于当前 git diff 生成准确报告
+  - 正确识别"任务计划正确，但执行未完成"的情况
+  - 避免误报导致的策略混乱
 
 ---
 
-## 🔧 已执行的修复
+### 问题 3: 策略循环陷阱 - 所有 issues 重复 4 次 ★ MEDIUM
 
-**注意**: Meta-Debugger 应该直接修复检测到的问题，但为了避免破坏系统，本次只生成报告。
+- **严重程度**: **MEDIUM** (非根因，但需要注意)
+- **现象**: 10 个 issues (M1-M4, m1-m6) 全部出现 4 次，每个都尝试过 1-2 种方法
+- **根因分析**:
+  这**不是框架 bug**，而是正常的迭代过程：
+  1. 前 3 次迭代尝试了 WRITING_ONLY（正确策略）
+  2. 第 4 次迭代升级到 FIGURE_CODE_REQUIRED 和 LITERATURE_REQUIRED（正确升级）
+  3. 但由于问题 1（执行断裂），修改未真正完成 → issues 继续重复
 
-建议立即执行以下修复：
+  **Memory 的策略升级逻辑是正确的**，问题出在执行层，不是策略层。
 
-- [ ] **修复 1**: 修改 `auto_research/memory.py` 的 `get_banned_methods()` 逻辑
-  - 移除关键词分类依赖
-  - 基于尝试历史直接判断
-  - 7 次重复强制禁用所有非 EXPERIMENT 方法
+- **证据**:
+  ```yaml
+  # auto_research/state/memory.yaml
+  issue_history:
+    M1: 4  # Related Work 引用不足 → LITERATURE (✓ 正确)
+    M2: 4  # Figure 尺寸过大 → FIGURE_CODE (✓ 正确)
+    M3: 4  # Page 6 拥挤 → WRITING (✓ 正确，因为依赖 M2)
+    M4: 4  # H100 投机性讨论 → WRITING (✓ 正确)
+    m1-m6: 4  # 各种小问题 → WRITING/FIGURE_CODE (✓ 正确)
 
-- [ ] **修复 2**: 修改 `auto_research/orchestrator.py` 添加 Literature task 验证
-  - 检查 Related Work 行数是否达标（150+ lines）
-  - 检查 BibTeX 条目是否真的被添加（25+ entries）
-  - 失败时自动重试或报警
+  issue_repair_methods:
+    M1: [LITERATURE_REQUIRED, LITERATURE_REQUIRED]  # 文献任务，正确
+    M2: [WRITING_ONLY, FIGURE_CODE_REQUIRED]         # 升级到 FIGURE_CODE，正确
+    M3: [EXPERIMENT_REQUIRED, WRITING_ONLY]          # ❌ EXPERIMENT 错误，但已纠正
+    M4: [WRITING_ONLY, WRITING_ONLY]                 # 正确
+  ```
 
-- [ ] **修复 3**: 修复 `auto_research/memory.py` 的 `record_issues()` 重复计数 bug
-  - 确保每个 issue 每次迭代只计数一次
-  - 运行 `soft_reset_counts(max_count=4)` 修正当前累积
+  **Memory 的建议分析**:
+  ```markdown
+  # 迭代历史 Memory (from task description)
+  **M2** (重复 4 次):
+    - 已尝试: WRITING_ONLY×1, FIGURE_CODE_REQUIRED×1
+    - 💡 建议: **LITERATURE_REQUIRED (补充引用和 Related Work)**
+    # ❌ 这个建议有误，应该继续 FIGURE_CODE（因为上次执行未完成）
+  ```
 
-- [ ] **修复 4**: 简化 Literature task 执行模式
-  - 方案 A: 添加 agent 间输出传递机制
-  - 方案 B: 合并为单 agent 任务（推荐）
+  **Review 的建议 (latest_review.md L60-76)**:
+  ```markdown
+  **突破方向**:
+  Since Paper Presentation is the bottleneck (< 7.5), the path forward is:
+  - **FIGURE_CODE_REQUIRED**: Modify Python plotting scripts to reduce figure sizes by 30-40%
+  - **WRITING_ONLY**: Reorganize §7 Related Work
+  ```
 
-- [ ] **修复 5**: 添加 Figure 验证机制
-  - 生成修改前后对比
-  - 或添加 manual checkpoint
+- **影响**:
+  - Memory 的建议与 Review 的建议部分冲突
+  - Planner 接收到混乱的信号（但最终还是正确分配了 M2: FIGURE_CODE）
+  - 未造成实质性错误（因为 Planner 优先使用了 Review 的建议）
+
+- **修复方案**:
+
+  **方案 A (立即修复)**: 重置 issue_history，重新开始计数
+  ```yaml
+  # 修改 auto_research/state/memory.yaml
+  issue_history: {}  # 清空，下次迭代重新计数
+  issue_repair_methods: {}
+  last_issues: []
+  ```
+
+  **方案 B (框架修复)**: 修正 Memory 的 `get_suggested_methods()` 逻辑
+  ```python
+  # auto_research/memory.py
+
+  def get_suggested_methods(self, issue_id: str, issue_description: str = "",
+                            reviewer_suggestion: str = None) -> List[str]:
+      """推荐下一步尝试的方法，优先使用 Reviewer 的建议"""
+
+      # ★★★ 优先级 1: 使用 Reviewer 的明确建议
+      if reviewer_suggestion:
+          logger.info(f"使用 Reviewer 建议: {reviewer_suggestion}")
+          return [reviewer_suggestion]
+
+      # 优先级 2: 检查上次执行是否真正完成
+      tried_methods = self.get_tried_methods(issue_id)
+      if tried_methods and len(tried_methods) > 0:
+          last_method = tried_methods[-1]
+          # 如果上次方法是 FIGURE_CODE 或 EXPERIMENT，可能执行未完成
+          # 建议再尝试一次相同方法
+          if last_method in ["FIGURE_CODE_REQUIRED", "EXPERIMENT_REQUIRED"]:
+              if self.get_issue_count(issue_id) < 5:
+                  logger.info(f"上次 {last_method} 可能未完成，建议重试")
+                  return [last_method]
+
+      # 优先级 3: 基于 issue 类型
+      issue_type = self.classify_issue_type(issue_description, issue_id)
+
+      if issue_type == "presentation":
+          # 展示问题：WRITING → FIGURE_CODE → LITERATURE (不要 EXPERIMENT)
+          if "WRITING_ONLY" not in tried_methods:
+              return ["WRITING_ONLY"]
+          elif "FIGURE_CODE_REQUIRED" not in tried_methods:
+              return ["FIGURE_CODE_REQUIRED"]
+          elif "LITERATURE_REQUIRED" not in tried_methods:
+              return ["LITERATURE_REQUIRED"]
+          else:
+              # 所有方法都尝试过，循环回 WRITING
+              return ["WRITING_ONLY"]
+
+      # ... rest of logic
+  ```
+
+- **预期效果**:
+  - Planner 优先使用 Review 的建议，而非 Memory 的历史建议
+  - 避免 Memory 的"盲目升级"（如 M2 不应升级到 LITERATURE）
+  - 当执行未完成时，允许重试相同方法
+
+---
+
+### 问题 4: Memory 建议与 Review 建议冲突 ★ LOW
+
+- **严重程度**: **LOW** (未造成实质性错误)
+- **现象**: Memory 建议 M2 使用 LITERATURE_REQUIRED，但 Review 明确指出应使用 FIGURE_CODE_REQUIRED
+- **根因分析**:
+  Memory 的升级逻辑是"尝试过 WRITING 和 FIGURE_CODE 后，升级到 LITERATURE"。
+  这在一般情况下合理，但**未考虑"上次执行未完成"的情况**。
+
+  M2 的情况：
+  - 第 3 次尝试: WRITING_ONLY （尝试改 LaTeX）
+  - 第 4 次尝试: FIGURE_CODE_REQUIRED （修改 Python + LaTeX）
+  - 第 4 次结果: **执行未完成**（只改了 Python，未改 LaTeX）
+  - Memory 判断: FIGURE_CODE 失败 → 建议升级到 LITERATURE
+  - **实际应该**: 再次尝试 FIGURE_CODE（因为上次未完成）
+
+- **影响**: 轻微（Planner 最终还是使用了 Review 的建议）
+
+- **修复方案**: 见问题 3 的方案 B（优先使用 Reviewer 建议，检测执行未完成情况）
+
+---
+
+## 已执行的修复
+
+- [x] **诊断报告生成**: 已写入 `auto_research/state/meta_diagnosis.md`
+- [ ] **需要人工确认**: 是否立即手动修复 LaTeX width 参数？（方案 A，预计 5 分钟）
 
 ---
 
 ## 建议的后续行动
 
-### 立即执行（紧急）
+### ⚡ P0 - 立即执行（5 分钟，立即见效）
 
-1. **修复 Memory 计数 bug**
+1. **手动修复 LaTeX width 参数** ← **最重要！**
    ```bash
-   python3 -c "from auto_research.memory import get_memory; m = get_memory(); print(m.soft_reset_counts(max_count=4))"
+   # 手动编辑 Latex/main.tex，修改 3 处 includegraphics width 参数
+   # Line ~129: 0.4 → 0.3
+   # Line ~199: 0.35 → 0.25
+   # Line ~480: 0.4 → 0.3
+
+   # 重新编译验证
+   cd Latex
+   pdflatex main.tex
+   pdflatex main.tex
+   # 检查 Page 6 是否有更多空间
    ```
 
-2. **修改 memory.py 的 get_banned_methods()**
-   - 实施上述修复方案 1
-   - 确保 7 次重复强制使用 EXPERIMENT
-
-3. **手动完成 M1 Literature Expansion**
-   - 不依赖自动化系统
-   - 手动添加 30+ BibTeX 条目到 references.bib
-   - 手动重写 Related Work 至 2.0 pages（5 个 subsections）
-   - 目标：分数从 6.85 提升至 7.5+
-
-### 短期（1-2 天）
-
-4. **修改 orchestrator.py 添加验证机制**
-   - Literature task 完成后检查行数和引用数
-   - FIGURE_CODE task 完成后生成对比报告
-
-5. **添加诊断工具**
+2. **删除旧的 validation_report.md**
    ```bash
-   # scripts/diagnose_system.py
-   # 自动检查：
-   # - Agent 输出是否被后续 agent 使用
-   # - 文件修改是否符合预期
-   # - Memory 计数器是否正常
+   rm auto_research/state/validation_report.md
    ```
 
-### 长期（系统改进）
+3. **重置 issue_history** (可选，打破循环)
+   ```bash
+   # 编辑 auto_research/state/memory.yaml
+   # 将 issue_history 全部设为 0 或 1
+   ```
 
-6. **重构 Literature task 执行模式**
-   - 合并为单 agent（Writer 直接读 literature.yaml）
-   - 或实现严格的 agent 间输出验证
+### 🔧 P1 - 短期修复（1-2 天，防止复发）
 
-7. **添加 visual regression testing**
-   - 每次修改 figures 后自动截图对比
-   - 检测字体大小、颜色对比度等指标
+4. **增强 Writer agent prompt** (问题 1 方案 B)
+   - 在 `auto_research/agents/writer.prompt` 添加 FIGURE_CODE 任务验证清单
+   - 明确指出"缩小图表 = 修改 LaTeX width，不是修改 Python"
 
-8. **考虑更换策略：放弃当前方向**
-   - 如果修复后分数仍不提升，考虑完全换一个突破方向
-   - 例如：补充 H100 实验数据（M3）而非继续打磨 presentation
+5. **修改 Orchestrator 添加任务验证** (问题 1 方案 C)
+   - 在 FIGURE_CODE 任务完成后检查 git diff
+   - 如果 LaTeX 未修改，报告任务未完成
+
+6. **修正 Memory 的 get_suggested_methods()** (问题 3 方案 B)
+   - 优先使用 Reviewer 的建议
+   - 检测"执行未完成"情况，允许重试
+
+### 🏗️ P2 - 长期优化（框架级改进）
+
+7. **Validator 生成 per-iteration 报告**
+   - 文件名改为 `validation_report_iter{N}.md`
+   - 基于当前 git diff，而非旧文件
+
+8. **Memory 策略升级逻辑重构**
+   - 区分 "presentation issue 升级路径" vs "technical issue 升级路径"
+   - Presentation: WRITING → FIGURE_CODE → LITERATURE (跳过 EXPERIMENT)
+   - Technical: EXPERIMENT → WRITING → LITERATURE
 
 ---
 
@@ -448,65 +460,101 @@ def record_issues(self, issues: List[str], iteration: int):
 
 ### 分数趋势
 ```
-7.0 → 7.0 → 7.0 → 7.0 → 6.95 → 6.85
-        (100)  (99)  (98)  (迭代号)
+Iteration -3: 7.0
+Iteration -2: 7.0  (delta: 0.0)
+Iteration -1: 6.8  (delta: -0.2)
+Iteration  0: 7.0  (delta: +0.2)
+Iteration  1: 6.95 (delta: -0.05)  ← 当前
 ```
 
-最高分: 7.6 (约在迭代 85-90)
-当前分: 6.85
-趋势: **下降** (-0.75 from peak, -0.1 from last)
+**历史最高**: 7.6
+**当前**: 6.95
+**距离目标 (8.0)**: 1.05 分
+**趋势**: 停滞 (在 6.8-7.0 之间波动)
 
 ### Issue 重复情况
 
-| Issue ID | 重复次数 | 尝试过的方法 | 问题类型 |
-|----------|---------|-------------|---------|
-| M1 | 7 | FIGURE_CODE×1, WRITING×1, EXPERIMENT×1, LITERATURE×2 | Related Work sparse |
-| M2 | 7 | WRITING×2, EXPERIMENT×1, FIGURE_CODE×1 | Page 6 layout crowding |
-| M3 | 7 | LITERATURE×1, WRITING×1, EXPERIMENT×1, FIGURE_CODE×2 | Figure信息密度失衡 |
-| M4 | 7 | FIGURE_CODE×1, WRITING×2, EXPERIMENT×1, LITERATURE×1 | H100 discussion短 |
-| m1 | 7 | WRITING×1, FIGURE_CODE×2 | Figure 2 字体过小 |
-| m2 | 7 | WRITING×1, FIGURE_CODE×2 | Figure 4 颜色对比度 |
-| m3 | 7 | WRITING×3 | Table 1 数值精度 |
-| m4 | 7 | WRITING×3 | Abstract 过长 |
-| m5 | 7 | WRITING×3 | 缺少 Limitations |
-| m6 | 7 | WRITING×3 | References 格式 |
+| Issue | 重复次数 | 尝试过的方法 | 最新分配 | 执行状态 | 冲突? |
+|-------|---------|-------------|---------|---------|------|
+| M1    | 4       | LITERATURE×2 | LITERATURE | 部分完成 (引用增加但不足) | No |
+| M2    | 4       | WRITING×1, FIGURE_CODE×1 | FIGURE_CODE | **执行断裂** (Python 改, LaTeX 未改) | **Yes** |
+| M3    | 4       | EXPERIMENT×1 (错误), WRITING×1 | WRITING | 依赖 M2 | Partial |
+| M4    | 4       | WRITING×2 | WRITING | 完成 | No |
+| m1    | 4       | WRITING×2 | WRITING | 完成 | No |
+| m2    | 4       | WRITING×1, FIGURE_CODE×1 | FIGURE_CODE | 完成 | No |
+| m3-m6 | 4       | WRITING×2 | WRITING | 完成 | No |
 
-### 最近修改的文件（git status）
-```
-M Latex/figures/*.pdf (all 6 figures)
-M Latex/main.tex
-M Latex/references.bib (+5 entries, 目标是 +30)
-M scripts/create_paper_figures.py
+**关键发现**: 只有 M2 存在**执行断裂**，是当前停滞的根本原因。
+
+### 最近修改的文件
+
+```bash
+# git status --short (关键文件)
+M scripts/create_paper_figures.py  # 34.5KB 修改 (字体 9→11pt)
+M Latex/main.tex                    # 但 includegraphics width 未改！
+M Latex/references.bib              # 引用更新 (部分完成)
+M auto_research/state/memory.yaml
+M auto_research/state/action_plan.yaml
+M auto_research/state/latest_review.md
 ```
 
-### Orchestrator 执行摘要（最近一次）
-- Literature agent: 运行 2 次（327s + 313s）
-- Writer agent: 运行 2 次（75s + 59s）
-- Validator agent: 运行 1 次（269s）
-- **问题**: Literature 任务声称 completed，但实际只完成 40%
+**关键断裂点**: `scripts/create_paper_figures.py` 改了，但 `Latex/main.tex` 的 `\includegraphics width` 未改。
+
+### Validator 报告摘要
+
+- **状态**: FAIL (基于旧数据，误报)
+- **基于**: validation_report.md (2026-01-28 17:03，旧数据)
+- **Resolution Rate**: 80% (partial + full) ← 实际可能更低
+- **预估分数**: 7.7-7.9 ← 但当前只有 6.95（差距 0.75-0.95）
+
+**矛盾原因**: Validator 假设 M2 解决 → 预估 +0.5，但实际 M2 未解决 → 分数无提升。
+
+---
+
+## 根因总结
+
+停滞的**真正原因**是单一、明确的：
+
+1. ✅ **Planner 制定的计划正确** (M2: FIGURE_CODE_REQUIRED)
+2. ✅ **Writer 部分执行了任务** (修改了 Python 代码)
+3. ❌ **Writer 未完整执行任务** (未修改 LaTeX width 参数) ← **唯一断裂点**
+4. ❌ **Validator 未检测到问题** (依赖旧报告)
+5. ❌ **Memory 记录了错误的 repair_effective=False** (基于误报)
+
+→ 导致下次迭代 Memory 建议错误方法，但幸运的是 Planner 还是使用了 Review 的建议
+
+**修复优先级**:
+- **P0 (Critical, 立即执行)**: 手动修改 LaTeX width (5 分钟，直接解决 M2)
+- P1 (High, 1-2 天): 增强 Writer prompt + Orchestrator 验证
+- P2 (Medium, 长期): Memory 升级逻辑重构 + Validator 改进
+
+**预期效果**:
+- **立即修复后**: M2 解决 → Presentation 6.0 → 6.8+ → 总分 6.95 → 7.4-7.6 (+0.45-0.65)
+- **下次迭代**: M1 (Literature) 补充完成 → 7.6 → 7.8-8.0 (+0.2-0.4)
+- **2 次迭代后**: 突破 Accept threshold (8.0)
 
 ---
 
 ## Meta-Debugger 自我诊断
 
 **我发现的根本问题**:
-1. ✅ **Memory 策略升级失效** - 已确认 (问题 1)
-2. ✅ **Agent 间信息传递失败** - 已确认 (问题 3)
-3. ✅ **执行验证缺失** - 已确认 (问题 2, 4)
-4. ✅ **计数器逻辑 bug** - 已确认 (问题 5)
+1. ✅ **执行验证脱节** - 已确认 (问题 1，Critical)
+2. ✅ **Validator 依赖旧数据** - 已确认 (问题 2，High)
+3. ⚠️ **策略循环陷阱** - 非根因，是正常迭代过程 (问题 3，Medium)
+4. ⚠️ **Memory 建议冲突** - 未造成实质性错误 (问题 4，Low)
 
-**可信度**: 高 (基于日志、代码审查、git diff 的综合证据)
+**可信度**: 高 (基于 git diff、日志、代码审查的综合证据)
 
 **建议优先级**:
-1. **Critical**: 修复 Memory.get_banned_methods() + 手动完成 M1 Literature
-2. **High**: 修改 orchestrator 添加验证机制
-3. **Medium**: 修复计数器 bug + soft_reset
-4. **Low**: 添加 Figure 验证工具
+1. **Critical**: 手动修复 LaTeX width (立即执行，5 分钟)
+2. **High**: 删除旧 validation_report.md + 重置 issue_history
+3. **Medium**: 增强 Writer prompt + Orchestrator 验证
+4. **Low**: Memory 逻辑重构（长期优化）
 
-**如果修复后仍停滞**:
-考虑完全换一个方向，例如：
-- 放弃 presentation 优化，全力补充 H100 实验数据
-- 或承认 Related Work 无法在自动化下完成，需要人工介入
+**如果立即修复后仍停滞**:
+可能性极低（因为根因明确），但如果发生：
+- 考虑 M1 (Literature) 需要人工补充（自动化系统可能无法完成 2.0 pages 的完全重写）
+- 或承认当前方向已达瓶颈，需要补充新实验数据（如 H100 validation）
 
 ---
 
@@ -517,27 +565,33 @@ M scripts/create_paper_figures.py
 cat auto_research/state/memory.yaml
 
 # 检查最近 git 修改
-git diff Latex/main.tex | head -200
-git diff Latex/references.bib | head -100
-git diff scripts/create_paper_figures.py
+git diff scripts/create_paper_figures.py | wc -l  # 34.5KB (1000+ lines)
+git diff Latex/main.tex | grep includegraphics | wc -l  # 0 lines ← 问题根源
+
+# 检查 Python 代码修改详情
+git diff scripts/create_paper_figures.py | grep -A5 "font.size"
+# 结果: 9 → 11 (提高了字体)
+
+# 检查 LaTeX 是否修改 width
+git diff Latex/main.tex | grep -A2 -B2 "width=0\.[34]"
+# 结果: 0 行输出 ← 证明未修改
 
 # 检查 Log
-tail -100 auto_research/logs/AutoGAC_paper_20260129_150433.log
+tail -100 auto_research/logs/AutoGAC_paper_20260129_205818.log
 
-# 检查 Related Work 实际长度
-awk '/^\\section{Related Work}/,/^\\section/' Latex/main.tex | wc -l
-
-# 检查 BibTeX 条目数
-grep "^@" Latex/references.bib | wc -l
+# 检查 Validator 报告时间
+ls -la auto_research/state/validation_report.md
+# 结果: Jan 28 17:03 (旧数据)
 ```
 
 ---
 
-**结论**: 系统处于 CRITICAL 状态的根本原因是**策略升级机制完全失效** + **agent 执行验证缺失**。这导致了重复无效尝试的死循环。建议立即手动介入完成 M1 Literature task，同时修复 Memory 和 Orchestrator 的核心逻辑。
+**结论**: 系统处于 WARNING 状态的根本原因是**执行验证断裂**（Writer 未完整执行任务）。这不是框架设计问题，而是单次执行失败。手动修复 LaTeX width 参数后，系统可恢复正常迭代。
 
-**预计恢复时间**: 如果立即修复，1-2 次迭代内应能突破 7.5 分。
+**预计恢复时间**: 手动修复后，下次迭代应能达到 7.4-7.6 分，2 次迭代内突破 8.0 分。
 
 ---
 
 *Meta-Debugger 诊断完成*
-*下一步：等待人工确认修复方案，或自动执行修复（如果授权）*
+*下一步：等待人工确认是否执行 P0 立即修复*
+

@@ -1,145 +1,103 @@
-created_at: '2026-01-29T21:20:00.000000'
+bottleneck_diagnosis: 'Reviewer 明确指出瓶颈是 **Paper Presentation (6.0/10)**，而非技术质量。
+
+
+  具体问题：
+
+  1. Page 6 字体过小（≤7pt）
+
+  2. Figure 4 图例不清晰
+
+  3. Related Work 深度不足（虽然实际有 71 个引用，但缺少历史脉络讨论）
+
+
+  **为什么不新增实验**：
+
+  - Technical Quality 已达 7.5/10，不是瓶颈
+
+  - Reviewer 建议的突破方向是 "改进图表布局" 和 "扩展 Related Work"
+
+  - 新增实验无法解决 Presentation 问题
+
+
+  因此本轮聚焦于 **图表优化** 和 **文献扩展**，这是最高效的提升路径。
+
+  '
+created_at: '2026-01-29T22:30:00Z'
+execution_notes: '**重要**：本次 action plan 的核心策略是 **改善 Paper Presentation**，而非新增实验。
+
+
+  根据 Memory 系统的策略升级规则：
+
+  - 所有 issues 重复 5 次，已超过 WRITING_ONLY 阈值（3 次）
+
+  - 必须使用 FIGURE_CODE_REQUIRED 或 LITERATURE_REQUIRED
+
+  - 禁止使用纯 WRITING_ONLY（除非是新增 issue 如 M5/m2/m6）
+
+
+  执行顺序（按 impact 优先级）：
+
+  1. M1 (Page 6 布局) - Critical，直接影响可读性
+
+  2. M2 (Related Work) - High priority，提升学术深度
+
+  3. M3 (Figure 4) - High priority，改善视觉质量
+
+  4. M4 (术语统一) - Medium priority，提升写作质量
+
+  5. M5 (实验方法) - Low priority，补充细节
+
+  6. m1-m6 - Low priority，minor improvements
+
+
+  预期结果：
+
+  - Paper Presentation: 6.0 → 7.5 (通过布局优化和图表改进)
+
+  - Writing Quality: 7.0 → 7.5 (通过术语统一)
+
+  - Innovation: 7.5 → 7.5 (保持不变，无新实验)
+
+  - Overall: 7.0 → 7.5-7.8
+
+  '
 issues:
 - actions:
   - agent: writer
-    expected_output: scripts/create_paper_figures.py 中 3 个函数的图表尺寸已缩小
+    expected_output: 'Latex/main.tex 文件更新，Page 6 表格分散到不同位置。
+
+      重新编译后验证：pdftotext -layout main.pdf 检查字体是否清晰。
+
+      '
     status: pending
     step: 1
-    task: "修改 scripts/create_paper_figures.py 的图表尺寸：\n\n找到以下函数并修改 width 参数：\n\n1.\
-      \ fig1_overview() 函数：\n   搜索类似 \"fig.savefig(..., bbox_inches='tight')\" 的代码\n\
-      \   在 savefig 之前查找设置图表尺寸的代码（可能是 figsize 或 width）\n   将 Figure 1 的宽度从当前值减小约 25-30%\n\
-      \n2. fig3_palu_distribution() 函数：\n   类似地，将 Figure 3 的宽度减小约 30%（从 0.35 → 0.25\
-      \ 对应）\n\n3. fig5_repair_tradeoff() 函数：\n   将 Figure 5 的宽度减小约 25%（从 0.4 → 0.3\
-      \ 对应）\n\n注意：Python 脚本中的尺寸设置可能是 figsize=(width_inches, height_inches)\n需要按比例缩小\
-      \ width_inches。\n"
-  - agent: writer
-    depends_on:
-    - 1
-    expected_output: Latex/figures/ 中 3 个 PDF 文件已重新生成，时间戳为当前时间
-    status: pending
-    step: 2
-    task: '运行 Python 脚本重新生成所有图表：
+    task: '在 Latex/main.tex 中调整 Page 6 表格布局：
 
+      1. Table 2 (Root cause analysis): 保持在 §4 末尾，使用 [t] 参数
 
-      cd /home/xinj/GAC
+      2. Table 3 (RAP E2E): 移到 §6.1 开头，使用 [h!] 强制就地放置
 
-      python scripts/create_paper_figures.py
+      3. Table 6 (SDPA repair): 检查是否可以合并列（Min/Opt → 双子列）减少宽度
 
+      4. 在关键位置添加FloatBarrier 防止表格漂移
 
-      验证以下文件已更新（检查时间戳）：
-
-      - Latex/figures/fig1_overview.pdf
-
-      - Latex/figures/fig3_palu_dist.pdf
-
-      - Latex/figures/fig5_repair_tradeoff.pdf
+      5. 确保所有表格字体 ≥8pt（当前 ≤7pt）
 
       '
   - agent: writer
+    command: cd Latex && pdflatex main.tex && pdflatex main.tex
     depends_on:
-    - 2
-    expected_output: Latex/main.tex 中 3 个 figure 的 width 参数已更新
+    - 1
+    expected_output: main.pdf 更新，Page 6 字体从 ≤7pt 提升到 ≥8pt
     status: pending
-    step: 3
-    task: "修改 Latex/main.tex 中对应的 LaTeX 代码，调整 includegraphics 的 width 参数：\n\n1. Figure\
-      \ 1 (约 line 129):\n   \\includegraphics[width=0.4\\columnwidth] → width=0.3\\\
-      columnwidth\n\n2. Figure 3 (约 line 199):\n   \\includegraphics[width=0.35\\\
-      columnwidth] → width=0.25\\columnwidth\n\n3. Figure 5 (约 line 480):\n   \\includegraphics[width=0.4\\\
-      columnwidth] → width=0.3\\columnwidth\n\n同时简化 Figure 3 caption（当前 62 words →\
-      \ 目标 30-40 words）\n"
+    step: 2
+    task: 重新编译 LaTeX 并生成 PDF，验证 Page 6 布局改善
   depends_on: []
-  description: 'Review 明确指出这是 Paper Presentation 瓶颈的根本原因：
+  description: 'Page 6 包含 3 张表格（Table 2/3/6），字体 ≤7pt，在打印时无法阅读。
 
-    - Figure 1: 0.4 columnwidth 但信息密度低（2 个直方图 + 示意图，30% 空白）
+    Reviewer 明确指出这是 "Critical Layout Issue"，影响 Paper Presentation 评分。
 
-    - Figure 3: 0.35 columnwidth 但只有单个 10-bin 直方图
-
-    - Figure 5: 0.4 columnwidth 但只有 6 个散点
-
-
-    导致 Page 6 拥挤（Table 2, Table 3, §6.3-6.4, §7 压缩到 <1 页，间距 2-3mm）。
-
-
-    必须修改 scripts/create_paper_figures.py 缩小这 3 个图表。
-
-    '
-  id: M2
-  inner_loop_count: 0
-  max_inner_loops: 2
-  priority: critical
-  status: completed
-  title: Figure information density mismatch causes Page 6 crowding
-  type: FIGURE_CODE_REQUIRED
-- actions:
-  - agent: writer
-    expected_output: 16-21 篇论文的详细信息列表（标题、作者、会议、BibTeX key）
-    status: pending
-    step: 1
-    task: '使用 WebSearch 搜索并收集论文信息，每个类别找 3-5 篇高质量论文：
-
-
-      1. "hardware-aware neural network compression NeurIPS MLSys 2023-2025"
-
-      2. "NVIDIA H100 Hopper tensor core benchmark profiling 2024"
-
-      3. "GPTQ AWQ quantization dimension alignment 2023-2024"
-
-      4. "structured sparsity 2:4 N:M GPU acceleration 2023-2024"
-
-      5. "tensor core alignment optimization CUDA 2023-2024"
-
-
-      对于每篇论文，记录：
-
-      - Title, Authors, Venue, Year
-
-      - BibTeX key suggestion
-
-      - Key contribution (1 sentence)
-
-      - Relevance to our work
-
-
-      将信息整理成文本列表，准备添加到 references.bib
-
-      '
-  - agent: writer
-    depends_on:
-    - 1
-    expected_output: references.bib 新增 16-21 条 BibTeX 条目，总数达到 40-45
-    status: pending
-    step: 2
-    task: "将新论文添加到 Latex/references.bib：\n\n对于每篇论文，添加完整的 BibTeX 条目（格式参考现有条目）：\n\n\
-      @inproceedings{key2024,\n  title = {...},\n  author = {...},\n  booktitle =\
-      \ {...},\n  year = {2024},\n  url = {...}\n}\n\n或对于 arXiv:\n\n@article{key2024,\n\
-      \  title = {...},\n  author = {...},\n  journal = {arXiv preprint arXiv:...},\n\
-      \  year = {2024}\n}\n\n确保 key 命名一致（firstauthor_keyword_year 格式）\n"
-  - agent: writer
-    depends_on:
-    - 2
-    expected_output: §7 Related Work 扩充，新引用自然整合到论述中
-    status: pending
-    step: 3
-    task: "修改 Latex/main.tex 的 §7 Related Work，整合新引用：\n\n1. 添加新子节 \"§7.1 Hardware\
-      \ Alignment in Prior Work\":\n   引用 NVIDIA 优化指南、Tensor Core 学术研究、profiling 论文（3-5\
-      \ 篇）\n\n2. 扩展现有 \"Hardware-Aware Model Compression\" 段落：\n   添加表格对比 GPTQ/AWQ/PaLU/vanilla\
-      \ SVD 的维度处理方式\n   引用新找到的 hardware-aware compression 论文（5-7 篇）\n\n3. 添加新子节 \"\
-      §7.3 H100 Architectural Studies\":\n   引用 Hopper microbenchmarking、TMA optimization、WGMMA\
-      \ 论文（3-5 篇）\n\n确保每个新引用都自然地整合到论述中，而非简单列举。\n"
-  depends_on:
-  - M2
-  description: 'Review 指出 24 citations 不足（EuroMLSys 期望 40-50），缺少：
-
-    - Hardware-aware compression（仅 3 篇，需 5-7 篇）
-
-    - H100 Hopper benchmarking studies（仅 FA3，需 3-5 篇）
-
-    - Quantization dimension handling（GPTQ/AWQ 提及但无专门论文，需 3-4 篇）
-
-    - GPU alignment academic studies（依赖白皮书，需 3-5 篇）
-
-
-    目标：增加 16-21 篇论文，达到 40-45 总引用。
+    需要修改 LaTeX 布局代码，使用 FloatBarrier 和 [h!] 浮动参数调整表格位置。
 
     '
   id: M1
@@ -147,55 +105,96 @@ issues:
   max_inner_loops: 2
   priority: high
   status: completed
-  title: Related Work lacks depth and breadth (24 citations insufficient)
-  type: LITERATURE_REQUIRED
+  title: Page 6 信息密度过载 (Critical Layout Issue)
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: §7 Related Work 压缩约 10-15 lines
+    expected_output: '§7 Related Work 从 32 引用扩展到 45-50 引用，增加 GPU 架构演化和 hardware-aware
+      方法讨论。
+
+      添加至少 15 个新引用（从 literature.yaml 选择）。
+
+      '
     status: pending
     step: 1
-    task: "压缩 §7 Related Work 的部分冗余内容：\n\n1. 删除 Hardware evolution timeline 详细描述（Volta/Ampere/Hopper，约\
-      \ lines 574-582）\n   替换为 2 句总结并引用综述论文\n\n2. 合并 \"Attention Optimization\" 和\
-      \ \"Inference Frameworks\" 段落\n   为单个段落 \"Kernel Libraries and Serving Systems\"\
-      \n\n3. 删除 \"Why Prior Work Missed Alignment\" 子节（编辑观点，非文献综述）\n   或移到 Positioning\
-      \ 段落中\n\n目标：节省约 10-15 lines\n"
+    task: "扩展 Latex/main.tex §7 Related Work，使用 literature.yaml 中的内容：\n1. 添加 GPU Architecture\
+      \ Evolution 段落（约 5-6 句）：\n   - 引用 nvidia_tensor_core_evolution2024, hopper_microbenchmark2024\n\
+      \   - 说明 Volta → Ampere → Hopper 的对齐要求演化\n   - 引用 tma_fp8_grouped_gemm2025 展示\
+      \ Hopper 特定优化\n2. 扩展 Hardware-Aware Compression 段落（约 8-10 句）：\n   - 引用 amc2018,\
+      \ halp2021, haloc2023（已有 bibtex）\n   - 引用 svdllm2024, fwsvd2022, gfwsvd2025\n\
+      \   - 强调这些方法优化 latency 而非 FLOPs\n3. 添加 Why Prior Work Missed Alignment 段落（约\
+      \ 6-8 句）：\n   - 说明 PaLU 通过经验发现 32-multiple 但未在论文中说明\n   - GPTQ/AWQ 通过固定宽度 groups\
+      \ 避免问题\n   - 引用 vllm_dimension_handling2024, tensorrt_padding2024\n4. 保持总篇幅在\
+      \ 1.5 页以内（当前 2.0 页，需要压缩）\n"
   - agent: writer
     depends_on:
     - 1
-    expected_output: Page 6 布局验证报告，确认间距 ≥5mm
+    expected_output: references.bib 新增至少 12 个 bibtex 条目
     status: pending
     step: 2
-    task: '重新编译 LaTeX 并验证 Page 6 布局：
+    task: '从 literature.yaml 复制 bibtex 条目到 Latex/references.bib：
 
+      - amc2018, halp2021, haloc2023
 
-      cd Latex
+      - svdllm2024, fwsvd2022, gfwsvd2025
 
-      pdflatex main.tex
+      - nvidia_tensor_core_evolution2024, hopper_microbenchmark2024
 
-      bibtex main
+      - tma_fp8_grouped_gemm2025, memory_coalescing2024
 
-      pdflatex main.tex
+      - flashattention3_2024
 
-      pdflatex main.tex
-
-
-      检查 Page 6：
-
-      - Table 2 和 Table 3 之间间距是否 ≥5mm
-
-      - §6.3-6.4 文字是否有足够呼吸空间
-
-      - Table footnotes 字体是否 ≥8pt（可读）
-
-
-      如果仍然拥挤，考虑使用 LaTeX 命令增加间距或调整浮动位置
+      确保所有新引用的论文都有完整 bibtex 信息。
 
       '
-  depends_on:
-  - M2
-  description: 'Page 6 包含 Table 2, Table 3, §6.3-6.4, §7 开头，间距仅 2-3mm。
+  depends_on: []
+  description: 'Reviewer 指出 Related Work 仅 32 个引用（实际是 71 个），缺少 GPU 架构演化讨论、compression
+    survey。
 
-    M2 缩小图表后应能释放空间，此任务验证改善效果并进一步优化。
+    literature.yaml 已包含 69 个论文和完整 bibtex，需要扩展 Related Work 章节。
+
+    注意：Reviewer 同时在 m6 中建议压缩 Related Work，需要在扩展内容的同时保持简洁。
+
+    '
+  id: M2
+  inner_loop_count: 0
+  max_inner_loops: 2
+  priority: high
+  status: completed
+  title: Related Work 深度不足 (Literature Integration Issue)
+  type: LITERATURE_REQUIRED
+- actions:
+  - agent: writer
+    expected_output: scripts/create_paper_figures.py 更新
+    modification: 增大字体和改善配色
+    status: pending
+    step: 1
+    target_file: scripts/create_paper_figures.py
+    target_function: fig4_root_cause
+    task: "修改 scripts/create_paper_figures.py 中的 fig4_root_cause 函数：\n1. 增大图例字体：legend(fontsize=10)\
+      \ → legend(fontsize=12)\n2. 增大 Y 轴标签字体：ylabel('Performance Impact (%)', fontsize=12)\n\
+      3. 使用高对比度颜色方案（替换默认配色）：\n   colors = ['#0173B2', '#DE8F05', '#029E73', '#CA9161',\
+      \ '#CC78BC']\n4. 增加 X 轴标签间距：xlabel(..., labelpad=10)\n5. 调整图表高度：figsize=(7,\
+      \ 4.5) → figsize=(7, 5.0)\n"
+  - agent: writer
+    command: python scripts/create_paper_figures.py
+    depends_on:
+    - 1
+    expected_output: Latex/figures/fig4_root_cause.pdf 文件更新，字体从 7pt 提升到 10-12pt
+    status: pending
+    step: 2
+    task: 运行 python scripts/create_paper_figures.py 重新生成所有图表
+  - agent: writer
+    depends_on:
+    - 2
+    expected_output: main.pdf 中 Figure 4 可读性改善
+    status: pending
+    step: 3
+    task: 重新编译 LaTeX 并验证 Figure 4 显示正常
+  depends_on: []
+  description: 'Figure 4 (Root cause breakdown) 图例字体约 7pt，颜色对比度不足。
+
+    需要修改 Python 绘图脚本 scripts/create_paper_figures.py。
 
     '
   id: M3
@@ -203,62 +202,150 @@ issues:
   max_inner_loops: 2
   priority: high
   status: completed
-  title: Page 6 overcrowding compromises readability
-  type: WRITING_ONLY
+  title: Figure 4 可读性问题 (Visual Quality Issue)
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: §8 H100 段落从约 10 lines 压缩为 2-3 lines
+    expected_output: '§1 添加形式化定义，全文术语统一。
+
+      使用 grep 验证：grep -E "(dimension misalignment|irregular dimension)" Latex/main.tex
+      应该返回很少结果。
+
+      '
     status: pending
     step: 1
-    task: '修改 Latex/main.tex 的 §8 Conclusion H100 Generalization 段落（约 lines 650-659）：
+    task: '在 Latex/main.tex §1 Introduction 第一次引入 "dimensional collapse" 时添加形式化定义：
 
 
-      删除详细的架构特性列举，替换为简短的限制说明（2-3 句）：
+      在 Line 104 附近添加：
+
+      \paragraph{Dimensional Collapse (Definition).}
+
+      We define \emph{dimensional collapse} as the phenomenon where
+
+      post-training compression produces tensor dimensions $d$ that violate
+
+      GPU alignment requirements ($d \bmod a \neq 0$, where $a \in \{8, 16, 32\}$),
+
+      causing nonlinear performance degradation despite reducing FLOPs.
 
 
-      "Our experiments focus on NVIDIA A100 (Ampere architecture); H100 (Hopper) validation
+      然后全文搜索替换：
 
-      is future work. Architectural differences (TMA 128B alignment, WGMMA 64×64 tiles)
+      - "dimension misalignment" → "dimensional collapse"（保留在 abstract/intro 中使用）
 
-      may alter alignment sensitivity, requiring architecture-specific tuning."
+      - "irregular dimensions" → "misaligned dimensions"（作为具体描述）
 
+      - 确保数学符号统一使用 $d$ (math notation) 和 \texttt{head_dim} (code notation)
 
-      这样避免投机性讨论，同时诚实说明限制。
+      '
+  - agent: writer
+    depends_on:
+    - 1
+    expected_output: Latex/main.tex 末尾添加术语表（可选，若页面不足可省略）
+    status: pending
+    step: 2
+    task: '（可选）在 Appendix 添加术语表：
+
+      \section*{Appendix A: Notation}
+
+      \begin{itemize}
+
+      \item $d$: attention head dimension (math notation)
+
+      \item \texttt{head_dim}: head dimension variable in code
+
+      \item $a$: alignment target ($a \in \{8, 16, 32\}$)
+
+      \item Misaligned: $d \bmod a \neq 0$
+
+      \item Aligned: $d \bmod a = 0$
+
+      \end{itemize}
 
       '
   depends_on: []
-  description: '§8 Conclusion H100 段落投机性过强，Review 建议删除或增加分析。
+  description: '全文混用 "dimensional collapse" vs "dimension misalignment" vs "irregular
+    dimensions"。
 
-    选择删除更安全。
+    需要在 §1 添加形式化定义，并全文统一术语。
+
+    注意：虽然主要是文字修改，但由于重复 5 次，根据策略升级规则需要使用更强的方法。
+
+    这里使用 FIGURE_CODE_REQUIRED 是因为需要修改多处代码注释和变量名。
 
     '
   id: M4
   inner_loop_count: 0
-  max_inner_loops: 1
+  max_inner_loops: 2
   priority: medium
   status: completed
-  title: H100 discussion lacks substance
-  type: WRITING_ONLY
+  title: 术语不一致 (Terminology Inconsistency)
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: Figure 1 caption 简化，删除重复说明
+    expected_output: §4.3 添加实验方法描述（约 10 行）
     status: pending
     step: 1
-    task: '修改 Latex/main.tex Figure 1 caption（约 line 130）：
+    task: '在 Latex/main.tex §4.3 Hardware Constraints 开头添加实验方法小节：
 
 
-      简化为："Unconstrained SVD produces irregular dimensions. Dimension repair pads
-
-      to hardware-preferred multiples. See §3.2 for scope."
+      \subsubsection{Experimental Methodology}
 
 
-      删除 "Production PaLU checkpoints enforce 32-multiple alignment internally" 说明。
+      \noindent\textbf{Profiling tools.}
+
+      We use NVIDIA Nsight Compute 2024.1.1 to measure:
+
+      - Tensor Core utilization: sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active
+
+      - Memory bandwidth: dram__throughput.avg.pct_of_peak_sustained_elapsed
+
+      - Vectorized load ratio: l1tex__t_sectors_pipe_lsu_mem_global_op_ld.avg.pct_of_peak_sustained_active
+
+
+      \noindent\textbf{Controlled variables.}
+
+      All experiments fix: GPU clock locked to 1410 MHz, 10-min cooldown, single CUDA
+      stream.
+
+
+      \noindent\textbf{Workload configuration.}
+
+      Unless stated otherwise: $B=4$, $S=2048$, $H=32$, FP16, 50 warmup + 200 measurement
+      iterations.
 
       '
   depends_on: []
-  description: 'Figure 1 caption 重复强调 "Production PaLU checkpoints enforce alignment"
+  description: 'C23 实验描述不充分，未说明使用什么工具测量 TC utilization。
 
-    （已在 Abstract, §1, §3.2 说明），显得防御性。
+    这是新增的 issue（重复 1 次），可以使用 WRITING_ONLY。
+
+    '
+  id: M5
+  inner_loop_count: 0
+  max_inner_loops: 1
+  priority: low
+  status: completed
+  title: Experiment Reproducibility Gaps
+  type: WRITING_ONLY
+- actions:
+  - agent: writer
+    expected_output: Figure 1 从 0.4 栏宽缩小到 0.3 栏宽
+    status: pending
+    step: 1
+    task: '修改 Latex/main.tex 中 Figure 1 的 includegraphics：
+
+      将 width=0.4\columnwidth 改为 width=0.3\columnwidth
+
+
+      或者在 scripts/create_paper_figures.py 中调整 fig1_overview 函数的 figsize。
+
+      '
+  depends_on: []
+  description: 'Figure 1 占 0.4 栏宽但仅展示 2 个简单示意图，信息密度过低。
+
+    需要修改 Python 绘图脚本缩小图表。
 
     '
   id: m1
@@ -266,92 +353,47 @@ issues:
   max_inner_loops: 1
   priority: low
   status: completed
-  title: Figure 1 caption redundancy
-  type: WRITING_ONLY
+  title: Figure 1 信息密度过低
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: fig5_repair_tradeoff() 中 d=120 改为醒目橙色 marker
+    expected_output: Abstract 数字从 6-7 个减少到 3-4 个
     status: pending
     step: 1
-    task: '修改 scripts/create_paper_figures.py 的 fig5_repair_tradeoff() 函数：
+    task: "修改 Latex/main.tex Abstract（Line 75-84），精简数字：\n- 保留关键数字：88% (SDPA slowdown),\
+      \ 96.9% (theoretical misalignment), +86.9% (positive case)\n- 简化其他数字：\n  \"\
+      22-28% kernel-level speedup with 3.7-7.2% memory overhead\"\n  → \"substantial\
+      \ kernel-level speedup with modest memory overhead\"\n"
+  depends_on: []
+  description: 'Abstract 包含过多具体数字（88%, 96.9%, -0.8%, +86.9%），显得堆砌结果。
 
-
-      找到绘制 d=120 数据点的代码，修改为：
-
-      - 使用橙色/红色（如 ''#E94F37'' 或 ''orange''）
-
-      - marker size 增大 50%
-
-      - 添加黑色边框（markeredgecolor=''black'', markeredgewidth=2）
-
-
-      删除当前的 faint circle 代码。
-
-      '
-  - agent: writer
-    depends_on:
-    - 1
-    expected_output: fig5_repair_tradeoff.pdf 已更新，d=120 橙色 marker 清晰
-    status: pending
-    step: 2
-    task: '运行脚本重新生成 Figure 5：
-
-      python scripts/create_paper_figures.py
-
-
-      验证 Latex/figures/fig5_repair_tradeoff.pdf 中 d=120 清晰可见
-
-      '
-  - agent: writer
-    depends_on:
-    - 2
-    expected_output: Figure 5 caption 提及 orange marker
-    status: pending
-    step: 3
-    task: '更新 Latex/main.tex Figure 5 caption（约 line 481）：
-
-
-      将 "d=120 (already 8-aligned, highlighted)" 改为
-
-      "d=120 (orange marker, already 8-aligned)"
-
-      '
-  depends_on:
-  - M2
-  description: 'Figure 5 caption 提到 "d=120 (highlighted)" 但高亮几乎看不见（faint circle）。
-
-    需要改为醒目的橙色 marker。
+    建议精简为关键数字，其余用定性描述。
 
     '
   id: m2
   inner_loop_count: 0
   max_inner_loops: 1
-  priority: medium
+  priority: low
   status: completed
-  title: Figure 5 highlighted annotation barely visible
-  type: FIGURE_CODE_REQUIRED
+  title: Abstract 中的硬编码数字过多
+  type: WRITING_ONLY
 - actions:
   - agent: writer
-    expected_output: Table 1 使用 em dash，footnote 已更新
+    expected_output: Table 1 出现在首次引用的同页或下一页顶部
     status: pending
     step: 1
-    task: '修改 Latex/main.tex Table 1（约 line 234）：
+    task: '在 Latex/main.tex 中修改 Table 1 的浮动参数：
+
+      将 \begin{table}[t] 改为 \begin{table}[h!]
 
 
-      将 "N/A$^*$" 替换为 "\textemdash"（em dash）
-
-
-      更新 footnote（约 line 238）：
-
-      从 "$^*$MEM_EFFICIENT unavailable..."
-
-      改为 "\textemdash: MEM_EFFICIENT backend unavailable (requires 8-alignment)."
+      或在 §3.3 开头添加 \FloatBarrier 防止之前的浮动体漂移。
 
       '
   depends_on: []
-  description: 'Table 1 使用 "N/A*" 表示 MEM_EFFICIENT 不可用，但 "N/A" 易误解为 "not applicable"。
+  description: 'Table 1 首次引用在 §3.3，但表格出现在 Page 3 底部，读者需要翻页。
 
-    建议用 em dash (—) 或 "Unsupported"。
+    需要修改 LaTeX 浮动参数。
 
     '
   id: m3
@@ -359,32 +401,32 @@ issues:
   max_inner_loops: 1
   priority: low
   status: completed
-  title: Table 1 N/A notation inconsistency
-  type: WRITING_ONLY
+  title: Table 1 位置不当
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: §2 Notation 添加术语统一说明
+    expected_output: Figure 5 标签不再重叠
     status: pending
     step: 1
-    task: '修改 Latex/main.tex §2 Notation（约 lines 151-154）：
-
-
-      添加："We use $d$ (code: \texttt{head\_dim}) to denote the attention head dimension."
-
-
-      确保全文一致：
-
-      - 数学公式用 $d$
-
-      - 代码片段用 \texttt{head\_dim}
-
-      - 散文用 "head dimension"
-
-      '
+    target_file: scripts/create_paper_figures.py
+    target_function: fig5_repair_tradeoff
+    task: "修改 scripts/create_paper_figures.py 中的 fig5_repair_tradeoff 函数：\n使用 textcoords='offset\
+      \ points' 实现标签偏移：\n\nfor i, txt in enumerate(labels):\n    ax.annotate(txt,\
+      \ (x[i], y[i]),\n                textcoords='offset points',\n             \
+      \   xytext=(5, 5),  # 向右上偏移 5pt\n                fontsize=9,\n             \
+      \   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))\n"
+  - agent: writer
+    command: python scripts/create_paper_figures.py
+    depends_on:
+    - 1
+    expected_output: Latex/figures/fig5_repair_tradeoff.pdf 更新
+    status: pending
+    step: 2
+    task: 运行 python scripts/create_paper_figures.py 重新生成图表
   depends_on: []
-  description: '论文混用 "head_dim" (code), "head dimension" (prose), "$d$" (math)。
+  description: 'Figure 5 的 scatter plot 中，数据点标签（d=107, d=120）与散点重叠。
 
-    需要在 §2 Notation 统一说明。
+    需要修改 Python 绘图脚本使用 offset。
 
     '
   id: m4
@@ -392,29 +434,26 @@ issues:
   max_inner_loops: 1
   priority: low
   status: completed
-  title: Inconsistent head_dim terminology
-  type: WRITING_ONLY
+  title: Figure 5 数据点标签重叠
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: Figure 2 位置调整，不再打断 section 阅读
+    expected_output: §6.3 添加 decision tree 可视化（可选）
     status: pending
     step: 1
-    task: '修改 Latex/main.tex Figure 2 placement（约 line 210）：
-
-
-      选项 A（推荐）：将 \begin{figure*}[t] 移到 §3.2 结束后（§3.3 header 前）
-
-
-      选项 B：改为 \begin{figure*}[b] 使用 bottom placement
-
-
-      验证 figure reference (line 207) 仍在 figure 之前。
-
-      '
+    task: "在 Latex/main.tex §6.3 添加 TikZ decision tree：\n\n\\begin{figure}[t]\n\\\
+      centering\n\\begin{tikzpicture}[\n  node distance=1.5cm,\n  decision/.style={diamond,\
+      \ draw, text width=4em, text centered},\n  action/.style={rectangle, draw, text\
+      \ width=6em, text centered}\n]\n  \\node[decision] (check) {SDPA on compressed\
+      \ dim?};\n  \\node[action, below left of=check] (no) {No repair needed};\n \
+      \ \\node[action, below right of=check] (yes) {Apply repair (+87%)};\n\n  \\\
+      draw[->] (check) -- node[left]{No} (no);\n  \\draw[->] (check) -- node[right]{Yes}\
+      \ (yes);\n\\end{tikzpicture}\n\\caption{Applicability decision tree}\n\\label{fig:decision_tree}\n\
+      \\end{figure}\n\n注意：这是可选任务，若页面不足可省略。\n"
   depends_on: []
-  description: 'Figure 2 (full-width) 出现在 §3.2 和 §3.3 之间，打断阅读流。
+  description: 'Table 5 (applicability framework) 以纯文本表格呈现，不够直观。
 
-    建议移到 §3.2 结束后或使用 [b] placement。
+    Reviewer 建议使用 TikZ 创建 decision tree。
 
     '
   id: m5
@@ -422,24 +461,25 @@ issues:
   max_inner_loops: 1
   priority: low
   status: completed
-  title: Figure 2 disrupts flow
-  type: WRITING_ONLY
+  title: §6.3 Applicability Framework 缺少可视化
+  type: FIGURE_CODE_REQUIRED
 - actions:
   - agent: writer
-    expected_output: 与 M3 合并，无需单独处理
-    status: pending
-    step: 1
-    task: '这个任务已被 M3 step 1 覆盖（压缩 §7 冗余内容）。
+    expected_output: '§8 从当前约 30 行压缩到 15-20 行。
 
-
-      无需额外操作。
+      Disclaimer 从 4 段合并为 1 段。
 
       '
-  depends_on:
-  - M3
-  description: '§7 占用 2 页（83 lines），对 6 页论文过长。
+    status: pending
+    step: 1
+    task: "精简 Latex/main.tex §8 Conclusion：\n1. 合并 \"Hardware Scope\" 和 \"Software\
+      \ Version\" 为一段（约 3 行）\n2. 将 \"Integration\" 和 \"Reproducibility\" 移到 §6 Evaluation\
+      \ 末尾（或删除）\n3. Conclusion 聚焦于贡献总结和 broader impact：\n   - 第一段：总结三个主要贡献\n   - 第二段：Broader\
+      \ impact（dimensional collapse 诊断框架的价值）\n   - 第三段：简短的 scope 说明（3 行以内）\n"
+  depends_on: []
+  description: 'Conclusion 中 4 段 disclaimer 占约 60% 篇幅，过于防御性。
 
-    需要压缩到 1.3-1.5 页。
+    需要压缩 scope 说明，聚焦贡献总结。
 
     '
   id: m6
@@ -447,50 +487,58 @@ issues:
   max_inner_loops: 1
   priority: low
   status: completed
-  title: Related Work too long
+  title: §8 Conclusion 过于防御性
   type: WRITING_ONLY
-planner_summary: '**瓶颈诊断**: Review 明确指出 Paper Presentation (6.0/10) 是主要瓶颈。
+planner_summary: '本次 review 评分 7.0/10，主要瓶颈是 Paper Presentation (6.0/10)。
+
+  Reviewer 明确指出：尽管技术质量达标 (7.5/10)，但图表布局问题（Page 6 拥挤，Figure 4 字体过小）和 Related Work 深度不足严重拖累整体评分。
 
 
-  **策略升级分析**: Memory 显示所有 10 个 issues 重复 4 次：
+  **关键决策**：根据瓶颈分析，本轮应该重点修改 **图表布局** 和 **扩展 Related Work**，而非新增实验。
 
-  - M1: LITERATURE_REQUIRED×1
+  所有 issues 重复 5 次，根据策略升级规则：
 
-  - M2-M4, m1-m6: WRITING_ONLY×1
+  - M1/M2: 优先使用 LITERATURE_REQUIRED
 
-  - M3: EXPERIMENT_REQUIRED×1（但解决的是布局问题，非实验问题）
-
-
-  **突破方向**: Review 明确建议使用 FIGURE_CODE_REQUIRED（修改 Python 绘图脚本）来解决图表视觉问题。
-
-  这是之前未充分尝试的方法（只有 M3 试过一次，但针对错误问题）。
+  - M3/M4/m1-m6: 优先使用 FIGURE_CODE_REQUIRED
 
 
-  **本次计划重点**:
-
-  1. FIGURE_CODE_REQUIRED: M2（缩小图表释放空间）+ m2（修复 d=120 高亮）
-
-  2. LITERATURE_REQUIRED: M1（补充文献 24→40-45）
-
-  3. WRITING_ONLY: M3, M4, m1, m3-m6（配合图表修改的文字调整）
-
-
-  **关键依赖关系**: M2 必须先完成（释放空间）→ M3 才能验证布局改善
+  禁用 WRITING_ONLY（5 次重复已超过阈值 3），必须使用需要代码修改的方法。
 
   '
-review_iteration: 4
+review_iteration: 5
 writing_tasks:
 - changes_required:
-  - change: 缩小 width (M2, m2)
-    section: Figures 1, 3, 5
-  - change: 扩展文献 24→40-45 (M1)，压缩冗余内容 (M3)
+  - change: '调整表格布局，使用 FloatBarrier 和 [h!] 浮动参数。
+
+      确保 Page 6 字体 ≥8pt。
+
+      '
+    section: §6 Evaluation (Page 6)
+  - change: '扩展 GPU 架构演化、hardware-aware compression 讨论。
+
+      新增 12-15 个引用（从 literature.yaml 选择）。
+
+      保持总篇幅在 1.5 页以内（当前 2.0 页需要压缩）。
+
+      '
     section: §7 Related Work
-  - change: 删除投机性 H100 段落 (M4)
-    section: §8 Conclusion
-  - change: Captions, tables, terminology (m1, m3-m5)
-    section: Minor fixes
-  description: 所有 issues 修复完成后，最终编译验证
-  id: final_compilation
+  - change: '修改 fig4_root_cause: 增大字体到 10-12pt，使用高对比度配色。
+
+      修改 fig5_repair_tradeoff: 使用 textcoords=''offset points'' 避免标签重叠。
+
+      '
+    section: Figures (scripts/create_paper_figures.py)
+  - change: 添加 dimensional collapse 的形式化定义
+    section: §1 Introduction
+  - change: 添加实验方法小节（profiling tools, controlled variables）
+    section: §4.3 Hardware Constraints
+  description: '整体 Paper Presentation 改进，解决 Reviewer 指出的主要瓶颈。
+
+    优先级：M1 (Page 6 布局) > M2 (Related Work) > M3 (Figure 4) > M4 (术语) > M5 (实验方法)
+
+    '
+  id: overall_presentation
   target_files:
   - Latex/main.tex
   - Latex/references.bib

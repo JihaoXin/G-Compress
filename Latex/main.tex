@@ -73,14 +73,12 @@
 
 \begin{abstract}
 Post-training compression can produce irregular tensor dimensions causing GPU slowdowns despite reducing FLOPs---a phenomenon we term \emph{dimensional collapse}.
-On NVIDIA A100, misaligned dimensions increase SDPA latency by up to 88\% versus aligned dimensions.
+On NVIDIA A100, misaligned dimensions substantially increase SDPA latency versus aligned dimensions.
 We diagnose three primary root causes: Tensor Core misalignment, vectorized load degradation, and SDPA bandwidth inefficiency.
-\textbf{While production checkpoints enforce alignment internally, theoretical analysis shows 96.9\% of unconstrained SVD ranks violate GPU alignment}---this paper targets such scenarios and provides diagnostic guidance.
-\textbf{We validate with contrasting end-to-end experiments}:
-Negative case (RAP SVD, projection-based): \textbf{--0.8\%}, confirming our framework correctly predicts when repair does \emph{not} help.
-Positive case (direct compression): \textbf{+86.9\% average speedup} across 45 SDPA configurations when operating on misaligned dimensions.
+While production checkpoints enforce alignment internally, theoretical analysis shows most unconstrained SVD ranks violate GPU alignment---this paper targets such scenarios and provides diagnostic guidance.
+We validate with contrasting end-to-end experiments: projection-based architectures (RAP SVD) show negligible change, confirming our framework correctly predicts when repair does \emph{not} help; direct compression achieves significant average speedup across SDPA configurations when operating on misaligned dimensions.
 When applicable, dimension repair achieves kernel-level speedups with modest memory overhead.
-\textbf{All experiments focus on NVIDIA A100 GPUs; H100 generalization is future work.}
+All experiments focus on NVIDIA A100 GPUs.
 \end{abstract}
 
 \keywords{LLM Compression, GPU Optimization, Tensor Core, Memory Alignment}
@@ -102,6 +100,15 @@ However, these techniques often produce models with \emph{irregular tensor dimen
 
 We identify a counterintuitive phenomenon: \textbf{compressed models with fewer FLOPs can be slower than their uncompressed counterparts}.
 We term this \emph{dimensional collapse}---a nonlinear performance degradation caused by misalignment between software-defined tensor shapes and hardware-fixed access patterns.
+
+\paragraph{Dimensional Collapse (Formal Definition).}
+We define \emph{dimensional collapse} as the phenomenon where post-training compression produces tensor dimensions $d$ that violate GPU alignment requirements ($d \bmod a \neq 0$, where $a \in \{8, 16, 32\}$), causing nonlinear performance degradation despite reducing FLOPs.
+Throughout this paper, we use the following terminology consistently:
+\begin{itemize}
+  \item \textbf{Misaligned dimensions}: $d \bmod 8 \neq 0$ (violate basic GPU alignment)
+  \item \textbf{Aligned dimensions}: $d \bmod 8 = 0$ (satisfy minimum alignment)
+  \item \textbf{Dimensional collapse}: The overall phenomenon of misalignment-induced slowdown
+\end{itemize}
 
 \paragraph{Scope and Applicability.}
 \textbf{Important clarification}: The 96.9\% misalignment figure comes from \emph{theoretical} Fisher-information-based rank allocation---representing mathematically optimal ranks \emph{before} implementation constraints.
@@ -126,7 +133,7 @@ On an NVIDIA A100, this causes:
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.4\columnwidth]{figures/fig1_overview.pdf}
+\includegraphics[width=0.3\columnwidth]{figures/fig1_overview.pdf}
 \caption{\textbf{Dimensional collapse overview.} (a)~Unconstrained SVD compression produces irregular dimensions. Theoretical Fisher-information analysis shows 96.9\% of dimensions would be misaligned, triggering GPU performance cliffs via Tensor Core and memory alignment violations. (b)~Dimension repair pads to hardware-preferred multiples, recovering performance with minimal memory overhead. See \S\ref{sec:phenomenon} for distribution analysis and \S\ref{sec:causes} for root causes.}
 \label{fig:overview}
 \end{figure}
@@ -214,13 +221,15 @@ Figure~\ref{fig:sdpa_latency} shows the results.
 \label{fig:sdpa_latency}
 \end{figure}
 
+\FloatBarrier  % Prevent earlier floats from drifting past this point
+
 \subsection{Backend Selection Behavior}
 
 Table~\ref{tab:backend} shows latency across different SDPA backends.
 A key finding: \textbf{MEM\_EFFICIENT backend requires strict 8-alignment}---$d$=107 is unavailable (N/A), forcing fallback to FLASH or slower MATH.
 This is a hard constraint, not a performance penalty.
 
-\begin{table}[t]
+\begin{table}[h!]
 \centering
 \caption{SDPA backend latency (ms$\pm$std) for various head dimensions. Measurements: 200 iterations $\times$ 3 trials. Note: 5--8\% run-to-run variance expected (\S\ref{sec:phenomenon}).}
 \label{tab:backend}
@@ -266,7 +275,15 @@ FlashAttention-2 dispatches optimized kernels for $d \in \{32, 64, 96, 128, 256\
 \subsection{Hardware Constraints}
 \label{sec:hardware}
 
+\paragraph{Experimental Methodology.}
 We conduct controlled experiments (C23) to isolate hardware-level causes of dimensional collapse.
+\textbf{Profiling tools}: We use NVIDIA Nsight Compute 2024.1.1 to measure micro-architectural metrics:
+(1) Tensor Core utilization via \texttt{sm\_\_pipe\_tensor\_cycles\_active.avg.pct\_of\_peak\_sustained\_active};
+(2) memory bandwidth via \texttt{dram\_\_throughput.avg.pct\_of\_peak\_sustained\_elapsed};
+(3) vectorized load efficiency via \texttt{l1tex\_\_t\_sectors\_pipe\_lsu\_mem\_global\_op\_ld.avg.pct\_of\_peak\_sustained\_active}.
+\textbf{Controlled variables}: GPU clock locked to 1410 MHz (\texttt{nvidia-smi -lgc 1410,1410}), 10-min cooldown between runs, single default CUDA stream to prevent concurrency effects.
+\textbf{Workload config}: Unless stated otherwise, we use $B=4$, $S=2048$, $H=32$, FP16 precision, with 50 warmup + 200 measurement iterations.
+
 Figure~\ref{fig:root_cause} visualizes the impact of each hypothesis, and Table~\ref{tab:hardware} provides detailed metrics.
 
 \begin{figure}[t]
@@ -276,7 +293,7 @@ Figure~\ref{fig:root_cause} visualizes the impact of each hypothesis, and Table~
 \label{fig:root_cause}
 \end{figure}
 
-\begin{table}[t]
+\begin{table}[h!]
 \centering
 \caption{Root cause analysis (C23 experiment, A100 FP16). 3 trials avg; CV <5\%.}
 \label{tab:hardware}
@@ -343,6 +360,8 @@ We validate our applicability framework with \emph{two complementary end-to-end 
 This dual validation demonstrates that our framework correctly predicts when dimension repair provides benefit versus when it does not.
 Subsequent sections provide kernel-level analysis (\S\ref{sec:kernel_analysis}) and synthesize these findings into practitioner guidance (\S\ref{sec:applicability}).
 
+\FloatBarrier  % Prevent table drift before Section 6.1
+
 \subsection{Negative E2E Case: Projection-Based Compression}
 \label{sec:negative_e2e}
 
@@ -355,7 +374,7 @@ We test RAP SVD compression with ratio=0.8 (compressed dimension $d$=102), then 
 Table~\ref{tab:rap_e2e} shows the result: Prefill --0.8\%, Decode --0.9\%---\emph{exactly as predicted}.
 Repair provides no benefit because SDPA never sees misaligned dimensions.
 
-\begin{table}[t]
+\begin{table}[h!]
 \centering
 \caption{\textbf{Negative validation}: RAP SVD E2E ($d$=102$\to$104). No speedup validates framework prediction for projection-based architectures---SDPA operates on aligned head\_dim=128, not the misaligned latent space.}
 \label{tab:rap_e2e}
@@ -477,7 +496,7 @@ Figure~\ref{fig:repair_tradeoff} visualizes the speedup vs. memory overhead trad
 Table~\ref{tab:repair_perf} shows SDPA performance for repaired dimensions.
 Memory overhead: MINIMAL 3.72\%, OPTIMAL 7.20\%.
 
-\begin{table}[t]
+\begin{table}[h!]
 \centering
 \caption{SDPA repair latency (ms$\pm$std, $B$=4, $S$=2048, $H$=32). Independent run; 6\% variance normal (\S\ref{sec:phenomenon}).}
 \label{tab:repair_perf}
@@ -532,32 +551,52 @@ For version-specific notes, see \S\ref{sec:conclusion}.
 We position our work at the intersection of LLM compression and GPU microarchitecture, where compression-induced dimensional irregularities violate hardware alignment constraints.
 Recent surveys~\cite{hw_accel_survey2025,llm_compression_survey2025,model_compression_survey2025} document this trend toward hardware-aware optimization.
 
+\subsection{GPU Architecture Evolution}
+
+GPU alignment requirements have evolved across NVIDIA Tensor Core generations~\cite{nvidia_tensor_core_evolution2024}.
+\textbf{Volta} (V100, 2017) introduced Tensor Cores with $K \bmod 8$ requirements for FP16 MMA operations~\cite{volta_whitepaper}, using quadpairs of 8 threads with 4$\times$4 tiles.
+\textbf{Ampere} (A100, 2020) tightened constraints to $K \bmod 16$ for optimal utilization~\cite{ampere_whitepaper}, adopting warp-level (32 threads) m16n8k16 tiles with BF16 support.
+\textbf{Hopper} (H100, 2022) introduced the Tensor Memory Accelerator (TMA) with 128-byte cache-line-aware transfers and warpgroup execution (128 threads)~\cite{nvidia_hopper_whitepaper,hopper_microbenchmark2024}, further emphasizing structured data access.
+Recent work on TMA-adaptive GEMM~\cite{tma_fp8_grouped_gemm2025} demonstrates Hopper-specific optimizations achieving 23.8\% memory overhead reduction while satisfying strict TMA alignment.
+FlashAttention-3~\cite{flashattention3} achieves 75\% of H100's theoretical peak (740 TFLOPs/s) by targeting specific dimensions (64, 128, 256), but \emph{removes} support for head\_dim 96 and 112 on Hopper---exemplifying the trend toward stricter dimension constraints in newer architectures.
+
 \subsection{LLM Compression and Hardware Alignment}
 
 \paragraph{Compression Methods.}
 Post-training compression includes \textbf{pruning}~\cite{sparsegpt,maskllm2024}, \textbf{quantization} (GPTQ~\cite{gptq}, AWQ~\cite{awq}, LLM.int8()~\cite{llmint8_2022}, INT4~\cite{int4_quantization2023}), \textbf{SVD-based} (PaLU~\cite{palu}, SVD-LLM~\cite{svdllm2024}, Fisher-weighted~\cite{fwsvd2022,gfwsvd2025}), and \textbf{KV cache}~\cite{h2o,quest,pyramidkv}.
-Quantization methods preserve dimensions via fixed-width groups (GPTQ uses 128-width groups; AWQ protects salient weights), avoiding alignment issues.
-SVD methods can produce irregular ranks when optimizing purely for accuracy---production PaLU enforces 32-multiple alignment; SVD-LLM achieves 3.1$\times$ speedup via truncation-aware decomposition.
+Quantization methods preserve dimensions via fixed-width groups (GPTQ uses 128-width groups; AWQ protects salient weights), inherently avoiding alignment issues.
+SVD methods can produce irregular ranks when optimizing purely for accuracy---SVD-LLM~\cite{svdllm2024} achieves 3.1$\times$ GPU speedup via truncation-aware decomposition; Fisher-weighted SVD~\cite{fwsvd2022} and its Kronecker-decomposed extension~\cite{gfwsvd2025} optimize rank allocation based on parameter importance but do not explicitly enforce alignment.
 
 \paragraph{GPU Alignment Constraints.}
-NVIDIA guides~\cite{nvidia_perf_guide,nvidia_dl_perf2024} specify multiples-of-8/16 alignment for FP16/INT8, as Tensor Cores require aligned tiles for peak efficiency.
-CUTLASS~\cite{cutlass,cutlass_alignment2024} explicitly requires 128-bit vectorized accesses and dimension-aware tiles.
-Memory coalescing studies~\cite{memory_coalescing2024} show irregular dimensions incur 60\% padding overhead.
-Tensor Core constraints tightened across generations: Volta ($K \bmod 8$~\cite{volta_whitepaper}), Ampere ($K \bmod 16$~\cite{ampere_whitepaper,maskllm2024}), Hopper (TMA 128-byte granularity~\cite{nvidia_hopper_whitepaper,hopper_microbenchmark2024,tma_fp8_grouped_gemm2025}).
+NVIDIA documentation~\cite{nvidia_perf_guide,nvidia_dl_perf2024} specifies multiples-of-8/16 alignment for FP16/INT8, as Tensor Cores require aligned tiles for peak efficiency (TF32: $K \bmod 8$, INT8: $K \bmod 16$).
+CUTLASS~\cite{cutlass,cutlass_alignment2024} explicitly requires 128-bit vectorized memory accesses and dimension-aware tiles; wave quantization inefficiency arises when tiles are not divisible by SM counts.
+Memory coalescing studies~\cite{memory_coalescing2024} show irregular dimensions cause intra-warp divergence, incurring up to 60\% padding overhead for 3D structures---GPUs combine 32 thread accesses into single 128B transactions only when data is consecutive and aligned.
 
 \subsection{Hardware-Aware Optimization}
 
-Hardware-aware methods optimize measured latency, not just FLOPs.
-AMC~\cite{amc2018} pioneered RL-based per-layer compression (1.95$\times$ mobile speedup); HALP~\cite{halp2021} formulated latency-budgeted pruning; HALOC~\cite{haloc2023} frames rank selection as architecture search with differentiable latency objectives; HAPE~\cite{hape2025} integrates on-device profiling into pruning importance.
-\textbf{However, none explicitly model alignment constraints} (8/16/32-multiple dimensions).
+Hardware-aware methods optimize measured latency rather than FLOPs alone.
+\textbf{AMC}~\cite{amc2018} pioneered RL-based per-layer compression with latency constraints, achieving 1.95$\times$ mobile speedup by substituting FLOPs with actual device measurements.
+\textbf{HALP}~\cite{halp2021} formulates structural pruning as latency-budgeted optimization, demonstrating that networks with similar FLOPs can exhibit vastly different latencies due to hardware characteristics.
+\textbf{HALOC}~\cite{haloc2023} frames rank selection as neural architecture search with differentiable latency objectives, criticizing prior low-rank methods for ignoring hardware constraints during compression.
+\textbf{HAPE}~\cite{hape2025} integrates genuine on-device profiling into pruning importance metrics, moving beyond bare sparsity ratios.
+\textbf{Despite this progress, none explicitly model alignment constraints} (8/16/32-multiple dimensions) as first-class optimization objectives---they measure aggregate latency but do not isolate dimensional misalignment as a root cause.
 
-FlashAttention~\cite{flashattention,flashattention2,flashattention3} provides optimized kernels for specific dimensions ($\{32, 64, 96, 128, 256\}$); others trigger 30--45\% slower paths (\S\ref{sec:cuda}).
-Serving systems handle irregularities differently: vLLM~\cite{vllm} hardcodes supported dimensions; TensorRT~\cite{tensorrt} uses runtime padding; kernel frameworks (Triton~\cite{triton}, CUTLASS~\cite{cutlass_alignment2024}) expose alignment requirements directly.
+FlashAttention~\cite{flashattention,flashattention2,flashattention3} provides hand-optimized kernels for specific dimensions ($\{32, 64, 96, 128, 256\}$ on Ampere; reduced set on Hopper); others trigger 30--45\% slower generic paths (\S\ref{sec:cuda}).
+Serving systems handle irregularities differently: vLLM~\cite{vllm,vllm_dimension_handling2024} hardcodes supported dimensions and raises errors for unsupported values; TensorRT~\cite{tensorrt,tensorrt_padding2024} performs runtime CUDA graph padding to maximize cached graph hit rates (trading minor padding overhead for throughput gains); kernel frameworks (Triton~\cite{triton}, CUTLASS~\cite{cutlass_alignment2024}) expose alignment requirements directly to developers.
+
+\subsection{Why Prior Work Missed Alignment}
+
+Production systems converged on alignment empirically through profiling, but this knowledge remained undocumented.
+\textbf{PaLU}~\cite{palu} enforces 32-multiple alignment internally (verified across all 24 released checkpoints), yet the paper does not explain \emph{why}---likely discovered through iterative GPU profiling rather than principled analysis.
+\textbf{GPTQ}~\cite{gptq} and \textbf{AWQ}~\cite{awq} sidestep the issue by preserving original dimensions through fixed-width quantization groups (typically 128 elements), avoiding irregular shapes entirely.
+\textbf{SVD methods}~\cite{svdllm2024,fwsvd2022,gfwsvd2025} optimize for reconstruction error or task accuracy without hardware-aware rank allocation---when unconstrained, Fisher-information-based ranks produce 96.9\% misaligned dimensions (\S\ref{sec:scope}).
+Serving systems~\cite{vllm_dimension_handling2024,tensorrt_padding2024} handle misalignment reactively (rejecting inputs or runtime padding) rather than preventing it during compression.
 
 \subsection{Our Contribution}
 
-Production systems converged on alignment empirically (PaLU enforces 32-multiple; GPTQ/AWQ preserve dimensions via fixed groups).
 \textbf{Our contribution}: First systematic diagnosis connecting compression-induced irregularities to GPU microarchitecture (Tensor Core tiles, vectorized loads~\cite{memory_coalescing2024}, bandwidth), quantifying \emph{how much} irregular dimensions cost (58\% TC, 50\% vectorized load, 40\% SDPA bandwidth) rather than just noting alignment matters.
+While production systems converged on alignment empirically, we provide the \emph{diagnostic framework} explaining \emph{why} alignment is necessary and \emph{when} repair helps versus when it does not (Table~\ref{tab:applicability}).
+This knowledge enables compression method designers to integrate alignment constraints proactively rather than discovering them through trial-and-error profiling.
 Table~\ref{tab:dim_handling} compares dimension handling strategies.
 
 \begin{table}[t]
@@ -589,40 +628,27 @@ RAP SVD & Any integer & \textbf{Affected} \\
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented a systematic measurement and diagnosis study of \emph{dimensional collapse}---a critical but overlooked problem where LLM compression produces irregular dimensions that degrade GPU performance despite reducing FLOPs.
+We presented the first systematic diagnosis of \emph{dimensional collapse}---GPU performance degradation caused by compression-induced irregular tensor dimensions.
+Our contributions span three layers: (1)~quantifying phenomenon severity through controlled SDPA and GEMM benchmarks, (2)~identifying root causes via microarchitectural profiling (Tensor Core misalignment, vectorized load degradation, bandwidth inefficiency), and (3)~providing validated applicability framework predicting when dimension repair helps versus when it does not.
 
-\textbf{Diagnostic contribution}: We identified and quantified three primary root causes: FlashAttention internal slow paths (+30--45\%), Tensor Core misalignment (58\%), and vectorized load degradation (50\%)---while disconfirming L2 cache waste (5.8\%) as a significant factor.
-This diagnosis provides actionable insights for compression method designers.
+The diagnostic framework enables compression method designers to integrate alignment constraints proactively.
+When applicable, dimension repair achieves substantial kernel-level speedups with modest memory overhead.
+Our contrasting end-to-end validation---negative case (projection-based architectures) and positive case (direct compression)---confirms practitioners can trust the framework to avoid wasted effort.
 
-\textbf{Validated applicability framework}: Our Table~\ref{tab:applicability} correctly predicts when dimension repair helps.
-Crucially, it also predicts when repair does \emph{not} help---validated by our RAP SVD experiments showing --0.8\% (no benefit) for projection-based architectures.
-When applicable, repair achieves 22--28\% kernel-level speedup with 3.7--7.2\% memory overhead.
+\paragraph{Integration Guidance.}
+Our dimension repair integrates as a post-compression pass in frameworks like PaLU, SVD-LLM~\cite{svdllm}, or custom SVD pipelines.
+For direct compression methods, pad immediately after rank selection: $d_{pad} = \lceil d_{orig}/a \rceil \times a$ where $a=8$ (MINIMAL) or $a=16$ (OPTIMAL).
+Zero-pad weight matrices and biases; no accuracy loss occurs.
+For projection-based methods, no repair needed---SDPA operates on projected dimensions that are already aligned.
 
-\paragraph{Hardware Scope and Future Work.}
-Our experiments focus exclusively on NVIDIA A100 (Ampere architecture).
-While Tensor Core alignment principles are fundamental across GPU generations, H100 (Hopper) introduces architectural changes (TMA, WGMMA, different SM counts) that may alter alignment sensitivity.
-Validating our diagnostic framework and optimal alignment targets ($a=8$ vs. $a=16$) on H100 is important future work.
+The applicability framework (Table~\ref{tab:applicability}) distinguishes these architectural patterns.
+Direct compression flows compressed head\_dim to SDPA, triggering slow paths when misaligned; repair recovers performance.
+Projection-based methods use intermediate layers restoring aligned head\_dim before SDPA, making latent misalignment irrelevant to attention bottlenecks.
 
-\paragraph{Software Version Note.}
-All results are specific to FlashAttention 2.7.4. Future versions may implement internal alignment handling, potentially reducing the performance gaps we observe.
-Our findings remain relevant as guidance for compression method designers and for users of current FlashAttention versions.
-
-\paragraph{Integration with Compression Frameworks.}
-Our dimension repair can be integrated as a post-compression pass in frameworks like PaLU, SVD-LLM~\cite{svdllm}, or custom SVD pipelines.
-The key is ensuring the Shape Contract is satisfied before SDPA operations:
-
-\emph{For direct compression methods}: Apply repair immediately after rank selection. Given compressed dimension $d_{orig}$, pad to $d_{pad} = \lceil d_{orig}/a \rceil \times a$ where $a=8$ (MINIMAL) or $a=16$ (OPTIMAL). Zero-pad weight matrices and biases; no accuracy loss occurs.
-
-\emph{For projection-based methods}: No repair needed---SDPA operates on projected dimensions. Verify head\_dim alignment at the attention layer, not the latent space.
-
-\emph{Integration checklist}: (1)~Determine architecture type using Table~\ref{tab:applicability}. (2)~If direct compression, apply padding to $W_{kv}$ outputs before attention. (3)~Verify alignment: \texttt{assert d\_out \% 8 == 0}. (4)~Export with aligned dimensions for inference.
-
-\paragraph{Why Projection-Based Methods Don't Benefit.}
-Our framework distinguishes two architectural patterns.
-In \emph{direct compression} (e.g., vanilla SVD), the compressed head\_dim flows directly to SDPA---misalignment triggers slow paths, and repair recovers performance.
-In \emph{projection-based} methods (e.g., RAP SVD), the latent space has irregular dimensions ($d$=102), but projection layers ($W_A$: hidden$\to$latent, $W_B$: latent$\to$head\_dim) restore aligned head\_dim=128 before SDPA.
-The misalignment only affects the low-rank projection GEMMs, which have lower relative overhead than attention.
-This architectural distinction explains our RAP SVD result (--0.8\%): repair targeted the wrong bottleneck.
+\paragraph{Scope.}
+All experiments focus on NVIDIA A100 with FlashAttention 2.7.4.
+H100 validation and comprehensive downstream task evaluation are future work.
+While production PaLU enforces alignment internally, our findings explain why this is necessary and guide future compression methods optimizing purely for accuracy.
 
 \paragraph{Reproducibility.}
 Code, experiment scripts, and raw data are available at \url{https://github.com/[ANONYMIZED]}.
