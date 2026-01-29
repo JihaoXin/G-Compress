@@ -1,4 +1,4 @@
-current_score: 6.95
+current_score: 6.85
 paper:
   format:
     columns: 2
@@ -1873,5 +1873,9 @@ reviews:
   log: /home/xinj/GAC/auto_research/logs/AutoGAC_paper_20260129_091222.log
   score: 6.95
   timestamp: '2026-01-29T09:32:02.476530'
+- iteration: 1
+  log: /home/xinj/GAC/auto_research/logs/AutoGAC_paper_20260129_150433.log
+  score: 6.85
+  timestamp: '2026-01-29T15:27:01.129400'
 status: in_progress
 target_score: 8
