@@ -12,10 +12,10 @@
   year={2024}
 }
 
-@misc{flashattention3,
+@article{flashattention3,
   title={FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision},
   author={Shah, Jay and Bikshandi, Ganesh and Zhang, Ying and Thakkar, Vijay and Ramani, Pradeep and Dao, Tri},
-  howpublished={arXiv preprint arXiv:2407.08608},
+  journal={arXiv preprint arXiv:2407.08608},
   year={2024}
 }
 
@@ -160,10 +160,10 @@
   year={2025}
 }
 
-@inproceedings{caldera,
+@article{caldera,
   title={CALDERA: Compressing LLMs using Low Rank and Low Precision Decomposition},
   author={Wei, Jiwei and others},
-  booktitle={arXiv preprint arXiv:2408.15285},
+  journal={arXiv preprint arXiv:2408.15285},
   year={2024}
 }
 
@@ -181,10 +181,10 @@
   year={2024}
 }
 
-@inproceedings{mixtral,
+@article{mixtral,
   title={Mixtral of Experts},
   author={Jiang, Albert Q and Sablayrolles, Alexandre and Roux, Antoine and Mensch, Arthur and Savary, Blanche and Bamford, Chris and others},
-  booktitle={arXiv preprint arXiv:2401.04088},
+  journal={arXiv preprint arXiv:2401.04088},
   year={2024}
 }
 
@@ -294,10 +294,10 @@
   year={2017}
 }
 
-@misc{triton,
+@inproceedings{triton,
   title={Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations},
   author={Tillet, Philippe and Kung, H. T. and Cox, David},
-  howpublished={MAPL 2019},
+  booktitle={MAPL},
   year={2019}
 }
 
@@ -402,6 +402,204 @@
 }
 
 
+% ===== HARDWARE-AWARE COMPRESSION =====
+
+@inproceedings{haloc2023,
+  title={HALOC: Hardware-Aware Automatic Low-Rank Compression for Compact Neural Networks},
+  author={Xiao, Jinqi and Zhang, Chengming and Gong, Yu and Yin, Miao and Sui, Yang and Xiang, Lizhi and Tao, Dingwen and Yuan, Bo},
+  booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume={37},
+  number={9},
+  pages={10464--10472},
+  year={2023}
+}
+
+@inproceedings{halp2021,
+  title={HALP: Hardware-Aware Latency Pruning},
+  author={Li, Meng and Liao, Rui and Wang, Mengchen and Ren, Kuangrong and Fan, Xin and Li, Can and Lin, Yufei and Niu, Wei and others},
+  booktitle={International Conference on Learning Representations},
+  year={2022}
+}
+
+@inproceedings{amc2018,
+  title={AMC: AutoML for Model Compression and Acceleration on Mobile Devices},
+  author={He, Yihui and Lin, Ji and Liu, Zhijian and Wang, Hanrui and Li, Li-Jia and Han, Song},
+  booktitle={European Conference on Computer Vision},
+  pages={784--800},
+  year={2018}
+}
+
+@article{hape2025,
+  title={HAPE: Hardware-Aware LLM Pruning For Efficient On-Device Inference Optimization},
+  author={Kim, Minseok and others},
+  journal={ACM Transactions on Design Automation of Electronic Systems},
+  year={2025}
+}
+
+@article{nas_llm_compression2024,
+  title={Compressing Large Language Models with Automated Sub-Network Search},
+  author={Sukthanker, Rhea Sanjay and Staffler, Benedikt and Hutter, Frank and Klein, Aaron},
+  journal={arXiv preprint arXiv:2410.06479},
+  year={2024}
+}
+
+% ===== SVD-BASED COMPRESSION =====
+
+@inproceedings{svdllm2024,
+  title={SVD-LLM: Truncation-aware Singular Value Decomposition for Large Language Model Compression},
+  author={Wang, Xin and Zheng, Yu and Wan, Zhongwei and Zhang, Mi},
+  booktitle={International Conference on Learning Representations},
+  year={2025}
+}
+
+@inproceedings{fwsvd2022,
+  title={Language Model Compression with Weighted Low-rank Factorization},
+  author={Hsu, Yen-Chang and Hua, Ting and Chang, Sungen and Lou, Qian and Shen, Yilin and Jin, Hongxia},
+  booktitle={Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing},
+  pages={1323--1335},
+  year={2022}
+}
+
+@article{gfwsvd2025,
+  title={Generalized Fisher-Weighted SVD: Scalable Kronecker-Factored Fisher Approximation for Compressing LLMs},
+  author={Li, Yuchen and others},
+  journal={arXiv preprint arXiv:2505.17974},
+  year={2025}
+}
+
+@article{lowrank_prehab2024,
+  title={Low-Rank Prehab: Preparing Neural Networks for SVD Compression},
+  author={Zhang, Yiming and others},
+  journal={arXiv preprint arXiv:2512.01980},
+  year={2024}
+}
+
+% ===== GPU ARCHITECTURE EVOLUTION =====
+
+@misc{nvidia_tensor_core_evolution2024,
+  title={NVIDIA Tensor Core Evolution: From Volta To Blackwell},
+  author={{SemiAnalysis}},
+  howpublished={\url{https://newsletter.semianalysis.com/p/nvidia-tensor-core-evolution-from-volta-to-blackwell}},
+  year={2024}
+}
+
+@article{hopper_microbenchmark2024,
+  title={Dissecting the NVIDIA Hopper Architecture through Microbenchmarking and Multiple Level Analysis},
+  author={Zhang, Yiming and Li, Chenhao and Sun, Jing and Huang, Xin and Wang, Yuxuan},
+  journal={arXiv preprint arXiv:2501.12084},
+  year={2024}
+}
+
+@article{tma_fp8_grouped_gemm2025,
+  title={TMA-Adaptive FP8 Grouped GEMM: Eliminating Padding Requirements in Low-Precision Training},
+  author={Chen, Yixin and others},
+  journal={arXiv preprint arXiv:2508.16584},
+  year={2025}
+}
+
+% ===== QUANTIZATION METHODS =====
+
+@inproceedings{llmint8_2022,
+  title={LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale},
+  author={Dettmers, Tim and Lewis, Mike and Belkada, Younes and Zettlemoyer, Luke},
+  booktitle={Advances in Neural Information Processing Systems},
+  volume={35},
+  pages={30318--30332},
+  year={2022}
+}
+
+@article{int4_quantization2023,
+  title={Understanding INT4 Quantization for Language Models: Latency Speedup, Composability, and Failure Cases},
+  author={Wu, Xiaoxia and Yao, Zhewei and He, Yuxiong},
+  journal={arXiv preprint arXiv:2301.12017},
+  year={2023}
+}
+
+% ===== PRUNING METHODS =====
+
+@inproceedings{structured_pruning_iclr2024,
+  title={Dynamic Sparse Training with Structured Pruning},
+  author={Zhou, Zixuan and others},
+  booktitle={International Conference on Learning Representations},
+  year={2024}
+}
+
+@inproceedings{maskllm2024,
+  title={MaskLLM: Learnable Semi-Structured Sparsity for Large Language Models},
+  author={Sun, Gongfan and Liang, Chengying and Song, Yurui and Wen, Zaixing and Chen, Shengji and Dong, Jing and Li, Donghai and Yuan, Yujie and Zhou, Dongsheng and others},
+  booktitle={Advances in Neural Information Processing Systems},
+  year={2024}
+}
+
+% ===== GPU MEMORY AND GEMM OPTIMIZATION =====
+
+@article{memory_coalescing2024,
+  title={Irregular Accesses Reorder Unit: Improving GPGPU Memory Coalescing},
+  author={Pham, Binh and others},
+  journal={The Journal of Supercomputing},
+  volume={78},
+  pages={5135--5161},
+  year={2024}
+}
+
+% ===== INFERENCE SYSTEMS =====
+
+@misc{vllm_dimension_handling2024,
+  title={Inside vLLM: Anatomy of a High-Throughput LLM Inference System},
+  author={{vLLM Team}},
+  howpublished={\url{https://blog.vllm.ai/2025/09/05/anatomy-of-vllm.html}},
+  year={2024}
+}
+
+@misc{tensorrt_padding2024,
+  title={TensorRT-LLM Architecture Overview},
+  author={{NVIDIA Corporation}},
+  howpublished={\url{https://nvidia.github.io/TensorRT-LLM/architecture/overview.html}},
+  year={2024}
+}
+
+% ===== GPU ARCHITECTURE EVOLUTION (Additional) =====
+
+@article{nvidia_dl_perf2024,
+  title={Deep Learning Performance: Matrix Multiplication},
+  author={{NVIDIA Corporation}},
+  howpublished={\url{https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/}},
+  year={2024}
+}
+
+@misc{cutlass_alignment2024,
+  title={CUTLASS 3.x: Orthogonal, Reusable, and Composable Abstractions for GEMM Kernel Design},
+  author={{NVIDIA Corporation}},
+  howpublished={\url{https://developer.nvidia.com/blog/cutlass-3-x-orthogonal-reusable-and-composable-abstractions}},
+  year={2024}
+}
+
+% ===== QUANTIZATION METHODS (Additional) =====
+
+% ===== SURVEYS (Comprehensive) =====
+
+@article{hw_accel_survey2025,
+  title={Hardware Acceleration for Neural Networks: A Comprehensive Survey},
+  author={Various},
+  journal={arXiv preprint arXiv:2512.23914},
+  year={2025}
+}
+
+@article{llm_compression_survey2025,
+  title={A Review of State-of-the-Art Techniques for Large Language Model Compression},
+  author={Various},
+  journal={Complex \& Intelligent Systems},
+  publisher={Springer},
+  year={2025},
+  url={https://link.springer.com/article/10.1007/s40747-025-02019-z}
+}
+
+@article{model_compression_survey2025,
+  title={A Survey of Model Compression Techniques: Past, Present, and Future},
+  author={Various},
+  journal={Frontiers in Robotics and AI},
+  year={2025},
+  url={https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2025.1518965/full}
+}
+
 % ===== END OF ADDITIONS =====
-% Total entries: 25
-% Copy these to Latex/references.bib

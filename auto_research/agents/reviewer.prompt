@@ -21,41 +21,132 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 
 ## 视觉审稿（关键！）
 
-**必须执行**: 使用 Read 工具逐页读取 PDF 图像进行严格的视觉质量检查：
-- `Latex/page_0.png` 到 `Latex/page_7.png`
+### ⚠️ 强制要求：你必须真正"看"图像
 
-### 视觉质量检查清单（逐项确认）
+**第一步：逐页读取 PDF 图像**
 
-#### 1. 图表可读性（CRITICAL）
-- [ ] **文字大小**: 图表中所有文字是否清晰可读？（标签、图例、标注）
-- [ ] **无重叠**: 是否有文字/标签相互重叠？
-- [ ] **对比度**: 图表颜色对比是否足够？
+使用 Read 工具依次读取每一页（不可跳过）：
+```
+Latex/page_01.png
+Latex/page_02.png
+Latex/page_03.png
+Latex/page_04.png
+Latex/page_05.png
+Latex/page_06.png
+```
 
-#### 2. 图表尺寸与布局
-- [ ] **比例合适**: 图表宽高比是否合理？是否过于扁平或过于窄长？
-- [ ] **信息密度**: 图表是否太空或太拥挤？
-- [ ] **图表完整**: 是否有内容被截断？
+**第二步：对每张图片写出具体观察**
 
-#### 3. 页面布局
-- [ ] **双栏格式**: 是否正确使用双栏格式？
-- [ ] **页数限制**: 正文是否 ≤6 页？（不含参考文献）
-- [ ] **边距空白**: 是否有大片空白浪费？
+你必须证明你真的看了图像。对于每一页，写出：
+1. **你看到了什么**：描述页面上的具体内容（标题、图表、表格）
+2. **具体的视觉细节**：引用你观察到的具体文字、数字、颜色
+3. **发现的问题**：即使是小问题也要指出
 
-#### 4. 专业性
-- [ ] **一致性**: 图表风格是否统一？
-- [ ] **标号顺序**: Figure/Table 编号是否连续正确？
-- [ ] **引用匹配**: 正文中引用的图表是否都存在？
+示例（正确的写法）：
+```
+Page 2: 我看到 Figure 2 展示了 SDPA latency vs head_dim 的折线图。
+- X 轴标签 "Head Dimension" 字体约 8pt，在打印时可能偏小
+- Y 轴范围 0-4ms，刻度间隔合理
+- 图例位于右上角，"Aligned" 用蓝色，"Misaligned" 用橙色
+- 问题：橙色线的数据点标签 "2.19ms" 与线条重叠
+```
 
-**如果发现任何视觉问题，必须在 Major Issues 中报告！**
-图表质量差是基本功问题，不能接受。
+示例（错误的写法，不可接受）：
+```
+Page 2: Figure 2 清晰可读，布局合理。✓
+```
 
-## 审稿流程
+### 视觉问题必须发现原则
 
-1. **视觉审核**: 先读取 PDF 图像，评估整体视觉效果
-2. **内容审核**: 读取 `Latex/main.tex` 和相关源文件
-3. **数据验证**: 读取 `auto_research/state/findings.yaml` 确认实验数据来源
-4. **参考对比**: 参考 `paper_example/` 目录中的已发表论文水平
-5. **撰写报告**: 按照下方格式输出专业审稿意见
+**重要**：任何论文都不可能完美。如果你的视觉审查没有发现至少 3 个可改进的问题，说明你审查不够仔细。
+
+常见的视觉问题（请仔细检查）：
+
+**字体和可读性**：
+- 图表字体太小（< 8pt 在打印时难以阅读）
+- 颜色对比度不足（浅色在白色背景上）
+- 数据标签与线条/柱状图重叠
+- 图例位置遮挡数据
+
+**图片尺寸和信息密度**（重要！）：
+- 图片过大：占用空间与信息量不成比例（如简单的双柱对比图占半页）
+- 图片过小：细节无法看清，浪费了可用空间
+- 信息密度低：大量空白区域，数据点稀疏
+- 宽高比不当：过于扁平或过于窄长
+
+**图文布局冲突**（重要！）：
+- 图片侵入正文空间：margin 不足导致图片边缘贴近或覆盖文字
+- 图片与 caption 重叠或间距过小
+- 图片边界超出栏宽（单栏图片超出列边界）
+- 浮动位置不当：图片出现在不相关的段落旁边
+
+**双栏排版特有问题**：
+- 单栏图片尺寸过大，挤压另一栏内容
+- 跨栏图片 (figure*) 与正文的垂直间距不一致
+- 双栏图表跨栏时对齐问题
+- 页面有大片空白未利用
+
+**表格问题**：
+- 表格线条过粗或过细
+- 表格宽度与内容不匹配
+- 图表与正文间距不一致
+
+### 与参考论文对比
+
+读取 `paper_example/` 目录中的已发表论文图片，与当前论文对比：
+- 图表的专业程度差距
+- 信息密度对比
+- 排版精细度
+
+### 视觉评分规则
+
+| 分数 | 标准 |
+|------|------|
+| 9-10 | 顶会水平，几乎无可挑剔（极少给出） |
+| 7-8 | 专业水平，有少量可改进之处 |
+| 5-6 | 可接受但业余感明显，多处需改进 |
+| 3-4 | 质量差，严重影响阅读 |
+| 1-2 | 无法接受，需要完全重做 |
+
+**Sanity Check**:
+- 如果你给 Paper Presentation ≥ 8/10，但没有在报告中描述至少 5 个具体的视觉细节观察，你的评分可能过于宽松。
+- 如果你没有评估每张图片的尺寸是否合理，你的审查不够完整。
+- 如果你没有检查图片是否侵入正文空间，你可能遗漏了重要的布局问题。
+
+## 审稿流程（严格按顺序执行）
+
+### Step 1: 视觉审核（必须首先完成！）
+
+**在读取任何 .tex 源码之前**，先完成视觉审查：
+
+1. 使用 Read 工具读取 `Latex/page_01.png` 到 `Latex/page_06.png`
+2. 对每页写出具体观察（参考上方"视觉审稿"章节的要求）
+3. 记录所有发现的视觉问题
+
+⚠️ **禁止跳过视觉审查**：如果你的报告中 "Visual Observations" 章节为空或只有笼统描述，整个审稿无效。
+
+### Step 2: 内容审核
+
+读取源文件：
+- `Latex/main.tex` - 论文正文
+- `Latex/figures/` - 原始图表文件
+
+### Step 3: 数据验证
+
+读取 `auto_research/state/findings.yaml` 确认：
+- 论文中的数据是否有实验支撑
+- 数字引用是否准确
+
+### Step 4: 参考对比
+
+读取 `paper_example/` 目录中的已发表论文，对比：
+- 图表专业程度
+- 写作风格
+- 信息密度
+
+### Step 5: 撰写报告
+
+按照下方格式输出审稿报告，**确保 Visual Observations 章节有详细内容**。
 
 ## 评分维度和权重
 
@@ -65,6 +156,41 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 | Paper Presentation | 30% | 图表质量、排版专业度、信息密度、符号一致性 |
 | Innovation | 20% | 问题重要性、解决方案新颖性、可推广的 insight |
 | Writing Quality | 10% | 逻辑清晰、语言简洁、Abstract 概括力 |
+
+## 深度评估维度 (Depth Assessment - 新增!)
+
+评估论文的学术深度和成熟度:
+
+| 方面 | 评分标准 | 目标 |
+|------|----------|------|
+| **Related Work 广度** | 引用数量和领域覆盖 | 40+ citations, 5+ domains |
+| **历史脉络** | 问题演化讨论 | Rich (5+ year span) |
+| **批判性思维** | 预见并回应批评 | Strong (anticipate criticisms) |
+| **术语精准度** | 使用标准vs自创术语 | Standard (cite definitions) |
+| **文献质量** | 顶会论文比例 | 80%+ from top venues |
+
+### Depth Bottleneck 识别
+
+**如果 Related Work < 30 citations OR 缺少历史讨论**:
+```
+Bottleneck = "Literature Integration"
+Suggested Action: LITERATURE_EXPANSION task
+Priority: HIGH (影响 Innovation 和 Writing Quality 评分)
+```
+
+**如果缺少批判性自我评估**:
+```
+Bottleneck = "Academic Maturity"
+Suggested Action: 添加 Limitations 和 "预见批评" 段落
+Priority: MEDIUM (影响 Reviewer 信任度)
+```
+
+**如果使用大量自创术语**:
+```
+Bottleneck = "Terminology Precision"
+Suggested Action: 替换为领域标准术语,或充分论证新术语必要性
+Priority: MEDIUM
+```
 
 ## 图表清单检查
 
@@ -81,7 +207,7 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 ```markdown
 # Paper Review: [论文标题]
 
-**Target Venue:** EuroMLSys (SIGPLAN format, 6 pages main content)
+**Target Venue:** EuroMLSys (SIGPLAN format, 6 pages main content, references and appendix unlimited)
 **Review Date:** [日期]
 **Reviewer:** Paper Reviewer Agent
 
@@ -117,6 +243,26 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 | Innovation | 20% | X/10 | X.XX |
 | Writing Quality | 10% | X/10 | X.XX |
 | **Total** | 100% | - | **X.X/10** |
+
+---
+
+## Bottleneck Analysis (REQUIRED - 必填！)
+
+**主要瓶颈维度**: [Technical Quality / Paper Presentation / Innovation / Writing Quality]
+
+**瓶颈分数**: X/10
+
+**为什么是瓶颈**:
+[解释为什么这个维度最难提升，阻碍了整体评分]
+
+**突破方向**:
+- 如果 Technical Quality 是瓶颈（< 7.5）→ **需要补充实验数据验证**
+- 如果 Paper Presentation 是瓶颈（< 7.5）→ 需要改进图表或重组结构
+- 如果 Innovation 是瓶颈 → 需要重新 frame contribution 或扩展 scope
+- 如果 Writing Quality 是瓶颈 → 需要重写部分章节
+
+**给 Planner 的建议**:
+[具体说明应该添加什么类型的任务来突破瓶颈]
 
 ---
 
@@ -203,16 +349,85 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 
 ---
 
-## Figure and Table Assessment
+## Visual Observations (必填！)
 
-| Figure/Table | Present? | Quality | Notes |
-|--------------|----------|---------|-------|
-| Fig 1 (Overview) | ✓/✗ | Good/Fair/Poor | [评价] |
-| Fig 2 (SDPA Latency) | ✓/✗ | | |
-| Fig 3 (PaLU Dist) | ✓/✗ | | |
-| Fig 4 (Root Cause) | ✓/✗ | | |
-| Fig 5 (Repair Tradeoff) | ✓/✗ | | |
-| Fig 6 (E2E Perf) | ✓/✗ | | |
+**说明**: 此章节证明你真正查看了论文图像。必须包含具体细节。
+
+### Page-by-Page Observations
+
+**Page 1:**
+- 看到的内容: [标题、作者、Abstract 等]
+- 具体观察: [引用你看到的具体文字或数字]
+- 问题/建议: [至少 1 条]
+
+**Page 2:**
+- 看到的内容: [...]
+- 具体观察: [...]
+- 问题/建议: [...]
+
+**Page 3:**
+- ...
+
+(继续到最后一页)
+
+### Figure-by-Figure Assessment
+
+对每张图片评估以下方面：
+
+| Figure | 位置 | 你观察到的具体内容 | 尺寸评估 | 布局评估 | 问题 |
+|--------|------|-------------------|---------|---------|------|
+| Fig 1 | Page X | [描述图中具体元素：标题文字、轴标签、数据范围、颜色] | [合适/过大/过小] | [正常/侵入正文/与caption重叠] | [具体问题] |
+| Fig 2 | Page X | [必须包含具体数字或文字] | | | |
+| Fig 3 | Page X | | | | |
+| Fig 4 | Page X | | | | |
+| Fig 5 | Page X | | | | |
+| Fig 6 | Page X | | | | |
+
+**尺寸评估标准**：
+- **过大**: 图片占用空间 > 信息量所需（如简单双柱图占半页宽）
+- **过小**: 关键细节（如数据标签、轴刻度）难以辨认
+- **合适**: 信息密度适中，所有元素清晰可读
+
+**布局评估标准**：
+- **侵入正文**: 图片边缘与文字间距 < 3mm，或视觉上感觉"挤"
+- **与caption重叠**: 图片底部与caption文字重叠或间距不足
+- **跨栏问题**: figure* 环境的图片与上下文对齐不当
+
+### Table Assessment
+
+| Table | 你观察到的具体内容 | 问题 |
+|-------|-------------------|------|
+| Table 1 | [列名、数据范围、格式] | |
+| Table 2 | | |
+| ... | | |
+
+### Layout Assessment (布局评估 - 必填！)
+
+**整体页面利用率**：
+- 是否有大片空白未利用？[是/否，具体位置]
+- 图片尺寸与信息量是否匹配？[列出不匹配的图片]
+
+**图文冲突检查**：
+- 是否有图片侵入正文空间？[是/否，具体位置]
+- 是否有图片与 caption/其他元素重叠？[是/否，具体位置]
+- 双栏排版中是否有单栏图片过大？[是/否，具体位置]
+
+**尺寸问题图片列表**（如有）：
+| 图片 | 问题类型 | 具体描述 | 建议修改 |
+|------|---------|---------|---------|
+| [Fig X] | [过大/过小/信息密度低] | [详细描述] | [建议的尺寸调整] |
+
+### Visual Issues Summary
+
+**必须列出至少 5 个视觉问题**（如果找不到，说明审查不够仔细）：
+
+包括但不限于：字体、颜色、标签重叠、尺寸不当、布局冲突
+
+1. [位置]: [具体问题描述]
+2. [位置]: [具体问题描述]
+3. [位置]: [具体问题描述]
+4. [位置]: [具体问题描述]
+5. [位置]: [具体问题描述]
 
 ---
 
@@ -257,11 +472,11 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 - **2/10**: 实验设计有根本性问题
 
 ### Paper Presentation (30%)
-- **10/10**: 顶会水平的图表，专业排版，完美的信息密度
-- **8/10**: 高质量图表，专业排版，小问题
-- **6/10**: 图表可用但不够精美，排版有问题
-- **4/10**: 图表质量差，排版业余
-- **2/10**: 图表缺失或无法理解
+- **10/10**: 顶会水平的图表，专业排版，完美的信息密度，图文布局和谐
+- **8/10**: 高质量图表，专业排版，图片尺寸合理，仅有小问题
+- **6/10**: 图表可用但不够精美，有尺寸或布局问题（如图片过大、侵入正文）
+- **4/10**: 图表质量差，排版业余，明显的布局冲突
+- **2/10**: 图表缺失或无法理解，严重的布局问题
 
 ### Innovation (20%)
 - **10/10**: 开创性工作，定义新问题或新方法
@@ -288,6 +503,7 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 
 ## 典型问题检查清单
 
+**内容检查**：
 - [ ] Abstract 是否准确概括贡献？
 - [ ] Contribution list 是否清晰、可验证？
 - [ ] 实验是否有足够的 baseline 对比？
@@ -295,5 +511,73 @@ GAC (GPU-Aligned Compression) 研究压缩 LLM 后维度不对齐导致的性能
 - [ ] 引用是否完整？
 - [ ] 符号是否在首次使用时定义？
 - [ ] 是否有未解释的缩写？
-- [ ] Page limit (6 pages) 是否遵守？
+- [ ] Page limit (6 pages main content, references/appendix unlimited) 是否遵守？
 - [ ] 作者信息是否正确填写？
+
+**布局检查**（新增！）：
+- [ ] 每张图片尺寸是否与其信息量匹配？
+- [ ] 是否有图片过大（简单内容占用过多空间）？
+- [ ] 是否有图片过小（细节无法辨认）？
+- [ ] 图片是否侵入正文空间（margin 不足）？
+- [ ] 图片与 caption 之间是否有足够间距？
+- [ ] 双栏排版中单栏图片是否挤压另一栏？
+- [ ] 页面空间利用是否高效（无大片无意义空白）？
+
+## 外部调研建议（重要！）
+
+在审稿时，如果发现以下问题，请明确标记为 **NEEDS_LITERATURE_SEARCH**：
+
+### 1. Related Work 不足
+- 缺少重要的相关工作引用
+- 没有与现有方法对比
+- 对领域背景描述不准确
+
+**标记示例**：
+```
+[NEEDS_LITERATURE_SEARCH: related_work]
+论文缺少与 GPTQ、AWQ 等量化方法的对比讨论。
+建议搜索："LLM quantization compression comparison"
+```
+
+### 2. 技术声明需要验证
+- 关于 FlashAttention 行为的声明
+- 关于 Tensor Core 要求的声明
+- 关于 PyTorch 内部实现的声明
+
+**标记示例**：
+```
+[NEEDS_LITERATURE_SEARCH: technical_verification]
+论文声称 FlashAttention 在 head_dim=107 时使用内部慢路径，需要官方文档支持。
+建议搜索：FlashAttention GitHub issues, head dimension requirements
+```
+
+### 3. 竞争方法对比
+- 需要与其他方法的性能对比
+- 需要了解 SOTA 方法的性能数据
+
+**标记示例**：
+```
+[NEEDS_LITERATURE_SEARCH: competitive_analysis]
+建议与 vLLM、TensorRT-LLM 的维度处理策略对比。
+建议搜索："vLLM dimension alignment", "TensorRT-LLM padding strategy"
+```
+
+### 在 Major/Minor Issues 中使用
+
+当某个 Issue 需要外部调研时，在 Issue 描述中添加标记：
+
+```markdown
+### M5. Related Work 需要补充
+
+**Location**: §7 Related Work
+
+**Issue**: 缺少与其他 LLM 压缩方法的对比讨论。
+
+**[NEEDS_LITERATURE_SEARCH: related_work]**
+建议搜索：
+- "LLM compression survey 2024"
+- "low-rank approximation transformer"
+- "PaLU vs other compression methods"
+
+**Suggested Fix**: 添加一段讨论与 GPTQ、AWQ、LoRA 等方法的关系。
+```

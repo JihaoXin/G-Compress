@@ -13,3 +13,32 @@ venv/
 # temp
 *.tmp
 .DS_Store
+texput.log
+
+# NFS temp files
+.nfs*
+
+# auto_research logs
+auto_research/logs/*.log
+
+# Latex build variants & temp page images
+Latex/main_*.tex
+Latex/main_*.pdf
+Latex/page_*.png
+Latex/.nfs*
+
+# Temporary analysis reports (auto-generated)
+*_VERIFICATION_RESULT.md
+*_ANALYSIS*.md
+*_SUMMARY*.md
+*_COMPLETE.md
+*_REPORT.md
+CITATION_*.md
+CITATION_*.json
+LITERATURE_*.md
+VALIDATION_REPORT.md
+PLANNER_*.md
+RESEARCH_EXPLANATION_*.md
+h100_limitation_check.json
+page6_metrics_report.json
+reference/

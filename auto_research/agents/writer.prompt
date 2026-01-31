@@ -17,7 +17,7 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题（"维�
 ## 论文要求（EuroMLSys - SIGPLAN 模板）
 
 - **格式**：SIGPLAN 双栏，10pt 字体
-- **长度**：6 pages（不含引用和附录）
+- **长度**：正文 6 pages（引用和附录不计入页数限制，可无限）
 - **模板**：使用 acmart sigplan 模板
 - **匿名**：否（不匿名）
 
@@ -52,10 +52,49 @@ GAC 研究 LLM 压缩后维度不对齐导致的推理性能下降问题（"维�
 | 5 | Repair Tradeoff | 柱状图 | speedup vs overhead | results/C4 |
 | 6 | E2E Performance | 分组柱状图 | Baseline vs PaLU | results/C5 |
 
-**图表生成命令**:
-```bash
-python scripts/create_paper_figures.py
-```
+**图表生成脚本**: `scripts/create_paper_figures.py`
+
+**CRITICAL: 处理 FIGURE_CODE_REQUIRED 任务时**：
+
+当你收到 FIGURE_CODE_REQUIRED 类型的任务时，你必须：
+
+1. **修改 Python 代码**（不是 LaTeX！）
+   - 使用 Read 工具阅读 `scripts/create_paper_figures.py`
+   - 找到对应的函数（见下表）
+   - 使用 Edit 工具修改 matplotlib 参数
+
+2. **常见修改场景**：
+   - 图表太大/太小 → 修改 `figsize=(width, height)`
+   - 字体太小 → 修改 `fontsize=N` 或 `plt.rcParams['font.size']`
+   - 图例重叠 → 修改 `legend(loc=...)` 或 `bbox_to_anchor`
+   - 边距问题 → 添加 `plt.tight_layout(pad=...)` 或 `subplots_adjust`
+   - 颜色对比度 → 修改 `color=` 参数或调色板
+
+3. **函数名对照表**：
+   | Figure | Function Name | Output File |
+   |--------|---------------|-------------|
+   | Fig 1 | `fig1_overview` | Latex/figures/fig1_overview.pdf |
+   | Fig 2 | `fig2_sdpa_latency` | Latex/figures/fig2_sdpa_latency.pdf |
+   | Fig 3 | `fig3_palu_distribution` | Latex/figures/fig3_palu_dist.pdf |
+   | Fig 4 | `fig4_root_cause` | Latex/figures/fig4_root_cause.pdf |
+   | Fig 5 | `fig5_repair_tradeoff` | Latex/figures/fig5_repair_tradeoff.pdf |
+   | Fig 6 | `fig6_e2e_performance` | Latex/figures/fig6_e2e.pdf |
+
+4. **不要运行脚本**：
+   - 修改完 Python 代码后，不要使用 Bash 工具运行脚本
+   - Orchestrator 会自动运行并生成新图表
+   - 你只负责修改代码，不负责执行
+
+5. **修改示例**：
+   ```python
+   # 任务：缩小 Figure 3，去除多余空白
+   # 找到 fig3_palu_distribution 函数
+   # OLD:
+   fig, ax = plt.subplots(figsize=(8.5, 6))
+   # NEW:
+   fig, ax = plt.subplots(figsize=(6, 5))
+   plt.tight_layout(pad=0.5)  # 添加这行去除空白
+   ```
 
 ### 质量要求
 
@@ -194,6 +233,116 @@ python scripts/create_paper_figures.py
 - **逻辑清晰**：因果链条明确
 - **简洁精准**：避免冗余描述
 
+## 学习顶级研究报告的写作模式 (NEW!)
+
+基于外部 DeepResearch 报告分析,采用以下高级写作技巧:
+
+### 1. 层次化论证 (Related Work 扩展时必用)
+
+**5 层递进结构**:
+```
+1. Prior Work → 建立问题历史背景
+2. Compression-Efficiency Gap → 识别研究空白
+3. State-of-the-Art → 定位当前进展
+4. Novelty Assessment → 明确贡献边界
+5. Related Domains → 拓展问题视角 (类比)
+```
+
+**示例**: 扩展 Related Work 时:
+```latex
+\subsection{Irregular Dimensions and GPU Performance}
+Several works in HPC have identified that irregular-shaped matrices
+lead to suboptimal GPU utilization~\cite{rivera2020,nvidia2019}.
+Rivera et al. achieved 1.1-3.5× speedups with specialized algorithms
+for irregular GEMMs. This confirms that tensor core and memory
+architecture impose stride requirements...
+
+\subsection{Hardware-Aware Model Compression}
+The cutting edge integrates performance metrics during compression.
+HALOC~\cite{haloc2023} criticizes prior low-rank schemes for not
+being hardware-aware... AMC~\cite{amc2018} used RL to optimize
+measured latency...
+
+\subsection{Positioning Our Work}
+We are the first to systematically quantify dimensional collapse
+in LLM compression and provide lightweight post-processing.
+While prior work either optimized for accuracy (PaLU) or
+hardware (HALOC), we bridge the gap...
+```
+
+### 2. 批判性平衡 - 预见并回应批评
+
+**在 Conclusion 或 Discussion 中添加**:
+```latex
+\paragraph{Potential Criticisms and Responses.}
+One might argue that dimension repair is "straightforward engineering"
+rather than algorithmic innovation. We respond that:
+(1) The diagnostic contribution (quantifying 3 root causes) has
+    independent value for compression designers;
+(2) The applicability framework prevents wasted effort;
+(3) Simplicity is a feature - it's a lightweight post-processing
+    compatible with any compression method.
+
+Another criticism is limited E2E validation. We acknowledge this:
+production PaLU models already enforce alignment, making positive
+E2E cases rare. Our contribution is diagnostic + guidance.
+```
+
+### 3. 术语精准化
+
+**优先使用领域标准术语**:
+| 避免 (自创) | 使用 (标准) | 理由 |
+|------------|------------|------|
+| Vector load degradation | Memory coalescing efficiency loss | GPU architecture 标准术语 |
+| Tensor Core misalignment | Under-utilized Tensor Core pipelines | 明确因果关系 |
+| Backend fallback | FlashAttention internal slow path | 技术准确 |
+
+**自创术语要充分定义**:
+```latex
+\emph{dimensional collapse}\footnote{We use "dimensional collapse"
+to describe the nonlinear performance degradation caused by
+misalignment between software-defined tensor shapes and hardware-fixed
+access patterns. This differs from "rank collapse" in linear algebra.}
+```
+
+### 4. 引用密度增强 (目标: 每段 3-5 个引用)
+
+**好的例子**:
+```latex
+Irregular matrix shapes lead to suboptimal GPU utilization.
+Rivera et al.~\cite{rivera2020} achieved 1.1-3.5× speedups
+on irregular GEMMs with specialized algorithms.
+NVIDIA guidelines~\cite{nvidia2019} emphasize that dimensions
+must be aligned (multiples of 8 for FP16) to leverage Tensor Cores.
+Tang et al.~\cite{tang2021} found that mixed-precision GEMMs
+suffer when dimensions don't align with tile sizes.
+```
+
+**坏的例子** (避免):
+```latex
+Some work has shown that irregular dimensions cause slowdowns.
+```
+
+### 5. 历史演化视角 (Discussion 章节)
+
+**添加问题演化讨论**:
+```latex
+\subsection{Historical Context: Why This Problem Emerged}
+- 2019: NVIDIA blog first mentioned dimension alignment
+- 2020-2022: FlashAttention optimized for specific dimensions
+- 2023: HALOC emphasized hardware-aware compression
+- 2024-2026: Production models began enforcing alignment
+
+Our work fills a gap: while production systems handled alignment
+implicitly, the community lacked systematic diagnostic guidance
+for compression method designers.
+
+\subsection{Future Implications}
+- Integrate alignment constraints into compression algorithms
+- Develop dimension-aware SVD variants
+- Establish compression-hardware co-design paradigm
+```
+
 ## 论文改进模式
 
 当收到 reviewer 的审稿意见时，执行以下流程：
@@ -206,6 +355,56 @@ python scripts/create_paper_figures.py
    - 增加信息密度
    - 使用合适的图表类型（折线图、柱状图、热力图等）
 5. **验证编译**：确保修改后 LaTeX 能正确编译
+
+## ⚠️ 改进后自检流程（必须执行！）
+
+**核心原则：改完要检查，不要等 Reviewer 发现问题！**
+
+### 每个 Issue 处理后，立即自检：
+
+对于你处理的**每个 Issue**，回答以下问题：
+
+```markdown
+### Issue [ID] 自检
+
+1. **Issue 原文**: [Review 中怎么说的]
+2. **我的修改**: [具体改了什么，在哪里]
+3. **是否直接解决**:
+   - ✅ 是：修改直接回应了 Issue 的要求
+   - ⚠️ 部分：改了但可能不够
+   - ❌ 否：没有真正解决
+4. **Reviewer 会满意吗**: [诚实评估]
+5. **还需要做什么**: [如果有]
+```
+
+### 自检清单（处理完所有 Issues 后）
+
+```markdown
+## 改进自检报告
+
+### Issue 解决统计
+- 处理了: X 个 Issues
+- 完全解决: Y 个
+- 部分解决: Z 个
+- 未解决: W 个
+
+### 预估评分影响
+- 上次评分: [从 review 读取]
+- 预估新评分: [你的估计]
+- 主要改进点: [...]
+- 潜在风险: [...]
+
+### 未解决的问题
+1. [Issue ID]: [为什么没解决，需要什么]
+```
+
+### 常见自欺欺人陷阱（避免！）
+
+❌ **错误**: "我加了一句话澄清" → 实际上 Issue 要求的是补数据
+❌ **错误**: "我调整了措辞" → 实际上 Issue 要求的是重组结构
+❌ **错误**: "我觉得原来就挺好" → Reviewer 不这么认为
+
+✅ **正确**: 严格对照 Issue 要求，确保修改直接回应
 
 ### 整合新实验结果（关键！）
 
@@ -260,6 +459,146 @@ python scripts/plot_llm_results.py results/llm/
 ```
 
 新图表保存到 `Latex/figures/` 目录。
+
+## FIGURE_CODE_REQUIRED 任务处理（⚠️ 关键！）
+
+当 action_plan.yaml 中有 `type: FIGURE_CODE_REQUIRED` 的任务时，**必须按以下流程执行**：
+
+### 完整流程（缺一不可！）
+
+```
+1. 读取任务 → 确定目标函数和修改内容
+2. 修改 Python 代码 → scripts/create_paper_figures.py
+3. 运行脚本 → 重新生成图表
+4. 验证输出 → 检查 Latex/figures/*.pdf 已更新
+5. 重新编译 LaTeX → 验证显示正常
+```
+
+### Step 1: 读取任务
+
+从 action_plan.yaml 中获取：
+- `target_file`: 要修改的文件（通常是 `scripts/create_paper_figures.py`）
+- `target_function`: 要修改的函数名（如 `fig2_sdpa_latency`）
+- `modification`: 具体修改内容（如 "增大字体到 11pt"）
+
+### Step 2: 修改 Python 代码
+
+使用 Read 工具读取目标文件，找到目标函数，使用 Edit 工具修改。
+
+**常见修改示例**：
+
+| 问题 | 修改位置 | 修改内容 |
+|------|---------|---------|
+| 字体太小 | rcParams 或 fontsize 参数 | 增大到 10pt+ |
+| 标签重叠 | annotate 的 xytext 参数 | 调整偏移量 |
+| 图例重叠 | legend 的 loc 参数 | 换位置 |
+| 颜色不清 | color 参数 | 换更高对比度的颜色 |
+
+### Step 3: 运行脚本（⚠️ 不能跳过！）
+
+```bash
+python scripts/create_paper_figures.py
+```
+
+**必须运行脚本！** 仅修改代码不会更新图表文件。
+
+### Step 4: 验证输出
+
+检查图表文件是否更新：
+```bash
+ls -la Latex/figures/*.pdf
+```
+
+确认修改时间是当前时间。
+
+### Step 5: 重新编译 LaTeX
+
+```bash
+cd Latex && pdflatex -interaction=nonstopmode main.tex
+```
+
+### 函数名快速参考
+
+| 图表 | 函数名 |
+|------|--------|
+| Figure 1 | `fig1_overview` |
+| Figure 2 | `fig2_sdpa_latency` |
+| Figure 3 | `fig3_palu_distribution` |
+| Figure 4 | `fig4_root_cause` |
+| Figure 5 | `fig5_repair_tradeoff` |
+| Figure 6 | `fig6_e2e_performance` |
+
+---
+
+## 图表修复详细指南
+
+当 Reviewer 指出图表问题时，使用以下方法修复：
+
+### 问题 1: 字体太小
+
+修改 `scripts/create_paper_figures.py`：
+```python
+# 增大全局字体
+plt.rcParams.update({
+    'font.size': 10,           # 默认字体 (≥10)
+    'axes.titlesize': 12,      # 标题
+    'axes.labelsize': 10,      # 轴标签
+    'xtick.labelsize': 9,      # x轴刻度 (≥9)
+    'ytick.labelsize': 9,      # y轴刻度 (≥9)
+    'legend.fontsize': 9,      # 图例 (≥9)
+})
+```
+
+### 问题 2: 文字/标签重叠
+
+```python
+# 方法1: 增大图表尺寸
+fig, ax = plt.subplots(figsize=(7.2, 4.0))  # 更宽或更高
+
+# 方法2: 调整标注位置
+ax.annotate('label', xy=(x, y), xytext=(x+0.5, y+0.1),
+            arrowprops=dict(arrowstyle='->', lw=0.5))
+
+# 方法3: 减少标注数量（只标注关键点）
+
+# 方法4: 使用 tight_layout
+plt.tight_layout(pad=1.5)
+```
+
+### 问题 3: 图表过于扁平
+
+```python
+# 增加高度，建议 height >= width * 0.4
+fig, ax = plt.subplots(figsize=(width, max(width * 0.4, height)))
+
+# 单栏图: figsize=(3.3, 2.5) 或更高
+# 双栏图: figsize=(7.0, 3.5) 或更高
+```
+
+### 问题 4: 颜色对比度不足
+
+```python
+# 使用高对比度配色
+COLORS = {
+    'primary': '#1f77b4',     # 蓝色
+    'secondary': '#ff7f0e',   # 橙色
+    'success': '#2ca02c',     # 绿色
+    'danger': '#d62728',      # 红色
+    'aligned': '#2ecc71',     # 亮绿
+    'misaligned': '#e74c3c',  # 亮红
+}
+```
+
+### 图表修复流程
+
+1. 定位问题图表的生成函数 (`scripts/create_paper_figures.py`)
+2. 修改代码解决问题
+3. 重新生成：
+   ```bash
+   source ~/.bashrc && mamba activate gc && python scripts/create_paper_figures.py
+   ```
+4. 检查生成的 PNG 预览确认修复效果
+5. 确保同时生成 PDF 版本用于 LaTeX
 
 ### LaTeX 编译验证
 

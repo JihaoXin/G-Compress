@@ -57,7 +57,7 @@ class SimpleMemory:
 
 ```
 论文标题: When Smaller Is Slower: Dimensional Collapse in Compressed LLMs
-目标会议: EuroMLSys 2025 (SIGPLAN format, 6 pages)
+目标会议: EuroMLSys 2025 (SIGPLAN format, 正文 6 pages, 引用和附录不限)
 
 核心贡献（不可偏离）:
 1. 发现并量化 Dimensional Collapse 现象
