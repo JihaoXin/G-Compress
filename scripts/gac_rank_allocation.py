@@ -175,12 +175,17 @@ def strategy_gac_dp(
     GAC DP: Multi-choice knapsack for optimal aligned rank allocation.
 
     For each projection, generate candidate ranks (multiples of `align` near
-    the ideal float rank). Use DP to minimize sensitivity-weighted deviation
-    from ideal ranks under total budget constraint.
+    the ideal float rank). Use DP to maximize Fisher-weighted value under
+    total budget constraint.
+
+    Asymmetric formulation: value_i = f_i * (r_i - r*_i)
+    - Round UP (r_i > r*_i): positive value (preserves information)
+    - Round DOWN (r_i < r*_i): negative value (loses information)
+    - High-Fisher layers get priority for rounding up
 
     The DP finds the allocation that:
     - Uses exactly the budget (or as close as possible)
-    - Minimizes sensitivity-weighted |chosen - ideal| summed over all projections
+    - Maximizes total Fisher-weighted value
     - All chosen ranks are multiples of `align`
     """
     # Build projection list with candidates
@@ -189,10 +194,9 @@ def strategy_gac_dp(
         for layer in range(NUM_LAYERS):
             key = (layer, proj)
             ideal = float_ranks[key]
-            sensitivity = fisher[proj][layer]
+            f_i = fisher[proj][layer]
 
             # Generate candidates: multiples of align near ideal
-            # Use wider search for low-sensitivity projections to allow budget flexibility
             ideal_aligned = round(ideal / align) * align
             candidates = []
             for offset in range(-search_radius, search_radius + 1):
@@ -209,52 +213,52 @@ def strategy_gac_dp(
             projections.append({
                 "key": key,
                 "ideal": ideal,
-                "sensitivity": sensitivity,
+                "fisher": f_i,
                 "candidates": candidates,
             })
 
-    # DP: minimize total weighted deviation under budget constraint
+    # DP: maximize total Fisher-weighted value under budget constraint
     budget_unit = align * NUM_GROUPS  # smallest budget quantum
     B = budget // budget_unit + 1
 
     n = len(projections)
-    INF = float("inf")
+    NEG_INF = float("-inf")
 
-    # dp[b] = min cost using exactly b budget units for first i projections
-    dp = [INF] * (B + 1)
+    # dp[b] = max value using exactly b budget units for first i projections
+    dp = [NEG_INF] * (B + 1)
     dp[0] = 0.0
     choice = [[None] * (B + 1) for _ in range(n)]
 
     for i, proj in enumerate(projections):
-        new_dp = [INF] * (B + 1)
+        new_dp = [NEG_INF] * (B + 1)
         for c in proj["candidates"]:
-            cost_c = proj["sensitivity"] * abs(c - proj["ideal"])
+            value_c = proj["fisher"] * (c - proj["ideal"])
             c_units = (c * NUM_GROUPS) // budget_unit
             for b in range(c_units, B + 1):
                 prev_b = b - c_units
-                if dp[prev_b] + cost_c < new_dp[b]:
-                    new_dp[b] = dp[prev_b] + cost_c
+                if dp[prev_b] > NEG_INF and dp[prev_b] + value_c > new_dp[b]:
+                    new_dp[b] = dp[prev_b] + value_c
                     choice[i][b] = c
         dp = new_dp
 
     # Find best feasible solution: prefer using full budget, but accept close
     max_b = budget // budget_unit
     best_b = None
-    best_cost = INF
+    best_value = NEG_INF
 
     # First try exact budget match
     for b in range(max_b, max(0, max_b - 3), -1):
-        if dp[b] < INF:
+        if dp[b] > NEG_INF:
             best_b = b
-            best_cost = dp[b]
+            best_value = dp[b]
             break
 
     # If no exact match, search wider
     if best_b is None:
         for b in range(max_b, -1, -1):
-            if dp[b] < INF:
+            if dp[b] > NEG_INF:
                 best_b = b
-                best_cost = dp[b]
+                best_value = dp[b]
                 break
 
     if best_b is None:
@@ -368,15 +372,17 @@ def analyze_strategy(
     n_misaligned = sum(1 for r in ranks.values() if r % 8 != 0)
     n_odd = sum(1 for r in ranks.values() if r % 2 != 0)
 
-    # Sensitivity-weighted deviation
-    weighted_dev = 0.0
+    # Fisher-weighted value (asymmetric: positive = round up, negative = round down)
+    fisher_value = 0.0
+    weighted_abs_dev = 0.0
     for proj in PROJ_NAMES:
         for layer in range(NUM_LAYERS):
             key = (layer, proj)
             ideal = float_ranks[key]
             actual = ranks[key]
-            sens = fisher[proj][layer]
-            weighted_dev += sens * abs(actual - ideal)
+            f_i = fisher[proj][layer]
+            fisher_value += f_i * (actual - ideal)
+            weighted_abs_dev += f_i * abs(actual - ideal)
 
     # Estimated latency penalty (sum of per-projection penalties)
     total_penalty = 0.0
@@ -398,7 +404,8 @@ def analyze_strategy(
         "n_misaligned_mod8": n_misaligned,
         "n_odd": n_odd,
         "pct_aligned_mod8": 100.0 * n_aligned_8 / len(ranks),
-        "weighted_deviation": weighted_dev,
+        "fisher_value": fisher_value,
+        "weighted_abs_deviation": weighted_abs_dev,
         "avg_latency_penalty": avg_penalty,
         "rank_mean": np.mean(all_ranks),
         "rank_min": min(all_ranks),
@@ -480,8 +487,8 @@ def main():
     # Step 3: Analyze each strategy
     print("\n" + "=" * 100)
     print(f"{'Strategy':<16} {'Budget':>8} {'Aligned/8':>10} {'Aligned/32':>11} "
-          f"{'Misaligned':>10} {'Odd':>5} {'Wt.Dev':>10} {'Avg Penalty':>12}")
-    print("=" * 100)
+          f"{'Misaligned':>10} {'Odd':>5} {'F.Value':>10} {'Abs.Dev':>10} {'Avg Penalty':>12}")
+    print("=" * 110)
 
     results = []
     for name, ranks in strategies.items():
@@ -491,7 +498,8 @@ def main():
               f"{stats['n_aligned_mod8']:>6}/{stats['n_projections']:<4}"
               f"{stats['n_aligned_mod32']:>7}/{stats['n_projections']:<4}"
               f"{stats['n_misaligned_mod8']:>8}  {stats['n_odd']:>5} "
-              f"{stats['weighted_deviation']:>10.1f} {stats['avg_latency_penalty']:>10.3f}x")
+              f"{stats['fisher_value']:>10.1f} {stats['weighted_abs_deviation']:>10.1f} "
+              f"{stats['avg_latency_penalty']:>10.3f}x")
 
     print("=" * 100)
 
@@ -537,14 +545,13 @@ def main():
 
     print(f"\n2. GAC DP: {gac_stats['n_misaligned_mod8']}/{gac_stats['n_projections']} misaligned")
     print(f"   → Average latency penalty: {gac_stats['avg_latency_penalty']:.3f}x")
-    print(f"   → Weighted deviation: {gac_stats['weighted_deviation']:.1f} "
-          f"(vs PaLU {palu_stats['weighted_deviation']:.1f})")
+    print(f"   → Fisher value: {gac_stats['fisher_value']:.1f} "
+          f"(vs PaLU {palu_stats['fisher_value']:.1f})")
 
     speedup = unaligned_stats['avg_latency_penalty'] / gac_stats['avg_latency_penalty']
     print(f"\n3. Estimated speedup from alignment (unaligned → GAC): {speedup:.2f}x")
 
-    dev_ratio = gac_stats['weighted_deviation'] / palu_stats['weighted_deviation']
-    print(f"   Accuracy proxy (weighted deviation) ratio GAC/PaLU: {dev_ratio:.3f}")
+    print(f"   Fisher value GAC: {gac_stats['fisher_value']:.1f}, PaLU: {palu_stats['fisher_value']:.1f}")
 
     print(f"\nResults saved to: {out_dir}/")
 

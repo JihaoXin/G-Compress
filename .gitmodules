@@ -4,3 +4,9 @@
 [submodule "ARK"]
 	path = ARK
 	url = git@github.com:JihaoXin/ARK.git
+[submodule "third_party/SVD-LLM"]
+	path = third_party/SVD-LLM
+	url = https://github.com/AIoT-MLSys-Lab/SVD-LLM.git
+[submodule "third_party/LLM-Pruner"]
+	path = third_party/LLM-Pruner
+	url = https://github.com/horseee/LLM-Pruner.git
