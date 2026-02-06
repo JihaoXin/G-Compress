@@ -2,7 +2,7 @@
 % Usage: \input{figures/fig_gac_framework.tex}
 \begin{figure*}[t]
 \centering
-\begin{tikzpicture}[scale=0.82, every node/.style={scale=0.82},
+\begin{tikzpicture}[scale=1.0, every node/.style={scale=1.0},
     >=stealth,
     % Colors
     cblue/.style={fill={rgb,255:red,55;green,131;blue,187}},
@@ -10,67 +10,54 @@
     cgreen/.style={fill={rgb,255:red,56;green,158;blue,92}},
     corange/.style={fill={rgb,255:red,230;green,159;blue,0}},
     % Styles
-    phase/.style={draw, rounded corners=5pt, minimum width=2.8cm, minimum height=1.8cm,
+    phase/.style={draw, rounded corners=5pt, minimum width=2.2cm, minimum height=1.5cm,
                   line width=0.9pt, font=\sffamily\small, align=center},
-    iobox/.style={draw, rounded corners=5pt, minimum width=2.4cm, minimum height=1.6cm,
+    iobox/.style={draw, rounded corners=5pt, minimum width=1.8cm, minimum height=1.3cm,
                   line width=0.9pt, font=\sffamily\small, align=center},
-    arrow/.style={->, line width=1.6pt, color=gray!70!black},
-    lbl/.style={font=\sffamily\scriptsize, align=center, text=gray!60!black},
+    arrow/.style={->, line width=1.4pt, color=gray!70!black},
+    lbl/.style={font=\sffamily\scriptsize, align=center, text=gray!50!black},
   ]
 
   % Input
   \node[iobox, fill=gray!10, draw=gray!50] (input) at (0, 0) {
-    \textbf{Input}\\[2pt]
-    {\scriptsize Pre-trained LLM}\\[-1pt]
-    {\scriptsize + budget $B$ + compressor}
+    \textbf{Input}\\[1pt]
+    {\footnotesize LLM + budget}\\[-1pt]
+    {\footnotesize + compressor}
   };
 
   % Step 1: Operator Analysis
-  \node[phase, cblue, text=white] (analysis) at (4.2, 0) {
-    \textbf{Operator Analysis}\\[2pt]
-    {\scriptsize SDPA / GEMM / GeMV}\\[-1pt]
-    {\scriptsize constraints (\S3)}
+  \node[phase, cblue, text=white] (analysis) at (3.8, 0) {
+    \textbf{Op.\ Analysis}\\[1pt]
+    {\footnotesize SDPA / GEMM}\\[-1pt]
+    {\footnotesize constraints (\S3)}
   };
 
   % Step 2: Dimension Sweep
-  \node[phase, corange, text=white] (sweep) at (8.4, 0) {
-    \textbf{Dimension Sweep}\\[2pt]
-    {\scriptsize Profile near each $r_i^*$}\\[-1pt]
-    {\scriptsize $\to$ candidate table $C_i$}
+  \node[phase, corange, text=white] (sweep) at (7.6, 0) {
+    \textbf{Dim Sweep}\\[1pt]
+    {\footnotesize Profile near $r_i^*$}\\[-1pt]
+    {\footnotesize $\to$ candidates $C_i$}
   };
 
   % Step 3: Knapsack DP
-  \node[phase, fill=violet!70!blue, text=white] (dp) at (12.6, 0) {
-    \textbf{Knapsack DP}\\[2pt]
-    {\scriptsize $\max \sum f_i(r_i - r_i^*)$}\\[-1pt]
-    {\scriptsize s.t.\ budget $B$}
+  \node[phase, fill=violet!70!blue, text=white] (dp) at (11.4, 0) {
+    \textbf{Knapsack DP}\\[1pt]
+    {\footnotesize $\max \sum f_i(r_i {-} r_i^*)$}\\[-1pt]
+    {\footnotesize s.t.\ budget $B$}
   };
 
   % Output
-  \node[iobox, fill=green!8, draw={rgb,255:red,56;green,158;blue,92}] (output) at (16.8, 0) {
-    \textbf{Output}\\[2pt]
-    {\scriptsize Aligned compressed}\\[-1pt]
-    {\scriptsize model (100\% aligned)}
+  \node[iobox, fill=green!8, draw={rgb,255:red,56;green,158;blue,92}] (output) at (14.8, 0) {
+    \textbf{Output}\\[1pt]
+    {\footnotesize 100\% aligned}\\[-1pt]
+    {\footnotesize model}
   };
 
   % Arrows
   \draw[arrow] (input) -- (analysis);
-  \draw[arrow] (analysis) -- (sweep) node[midway, above=3pt, lbl] {constraints};
-  \draw[arrow] (sweep) -- (dp) node[midway, above=3pt, lbl] {candidates};
-  \draw[arrow] (dp) -- (output) node[midway, above=3pt, lbl] {optimal ranks};
-
-  % Example annotation below
-  \node[draw, rounded corners=3pt, fill=yellow!8, draw=orange!40, line width=0.6pt,
-        font=\sffamily\scriptsize, align=left, text width=14.5cm]
-    (example) at (8.4, -2.2) {
-    \textbf{Example} ($W_3$, layer 7, k\_proj): \quad
-    $r^* = 107.3$ \quad$\to$\quad
-    candidates $C = \{96, 104, 112, 128\}$ \quad
-    {\color{red!70!black}(107 excluded --- cuBLAS cliff)} \quad$\to$\quad
-    DP picks $r = 104$ \quad
-    {\color{gray}(saves budget for sensitive layers)}
-  };
-  \draw[->, line width=0.8pt, dashed, gray!50] (sweep.south) -- ([yshift=0.3cm]example.north -| sweep);
+  \draw[arrow] (analysis) -- (sweep) node[midway, above=2pt, lbl] {constraints};
+  \draw[arrow] (sweep) -- (dp) node[midway, above=2pt, lbl] {candidates};
+  \draw[arrow] (dp) -- (output) node[midway, above=2pt, lbl] {ranks $\{r_i\}$};
 
 \end{tikzpicture}
 \caption{\textbf{GAC framework.}

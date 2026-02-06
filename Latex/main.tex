@@ -108,7 +108,7 @@ Different compression techniques alter different GEMM dimensions:
 Each pathway has distinct alignment sensitivities (\S\ref{sec:analysis}).
 
 \paragraph{Contributions.}
-\textbf{(1)}~A systematic full-stack analysis of dimensional collapse across three levels---framework, library, and hardware---quantifying per-mechanism penalties on A100 (\S\ref{sec:analysis}).
+\textbf{(1)}~A systematic full-st ack analysis of dimensional collapse across three levels---framework, library, and hardware---quantifying per-mechanism penalties on A100 (\S\ref{sec:analysis}).
 \textbf{(2)}~\textbf{GAC}: a general framework that wraps any compressor and selects aligned dimensions via dimension-level profiling and multi-choice knapsack DP, maximizing Fisher-weighted information preservation under the parameter budget (\S\ref{sec:gac}).
 \textbf{(3)}~End-to-end evaluation on Llama-3-8B with ASVD~\cite{asvd} (SVD factorization) and LLM-Pruner~\cite{llmpruner} (structured pruning), showing that GAC achieves 100\% alignment with up to 1.5$\times$ prefill speedup (\S\ref{sec:eval}).
 
@@ -125,12 +125,12 @@ For FP16 on A100, the MMA instruction \texttt{mma.m16n8k16} requires $K \bmod 16
 Misaligned dimensions force instruction downgrade or padding.
 
 \paragraph{SDPA Backends.}
-PyTorch's scaled dot-product attention~\cite{pytorch_sdpa} dispatches to three backends: FlashAttention-2~\cite{flashattention2}, MEM\_EFFICIENT, and MATH.
-FA2 selects the smallest template $\geq d$ from \{64, 96, 128, 160, 192, 224, 256\}; each boundary halves tile width $B_c$, doubling iteration count.
-MEM\_EFFICIENT requires $d \bmod 8 = 0$; when unavailable, PyTorch falls back to MATH (up to 12$\times$ slower).
+PyTorch's SDPA~\cite{pytorch_sdpa} dispatches to FlashAttention\nobreakdash-2 (FA2)~\cite{flashattention2}, MEM\_EFFICIENT, or MATH.
+FA2 picks the smallest template ${\geq}\,d$ from \{64, 96, \ldots, 256\}; each boundary halves tile width $B_c$, doubling iterations.
+MEM\_EFFICIENT needs $d \bmod 8 {=} 0$; otherwise MATH is used (up to $12{\times}$ slower).
 
-\paragraph{Low-Rank Compression and Pruning.}
-SVD methods~\cite{asvd,svdllm2024,fwsvd2022} decompose $W {\approx} U_r \Sigma_r V_r^T$, with rank $r$ set by layer importance---typically non-aligned.
+\paragraph{Low-Rank and Pruning Methods.}
+SVD methods~\cite{asvd,svdllm2024,fwsvd2022} decompose $W {\approx} U_r \Sigma_r V_r^T$; rank $r$ is set per layer and typically non-aligned.
 Structured pruning~\cite{llmpruner,sparsegpt} removes neurons by importance, altering dimension~$N$.
 
 
@@ -150,12 +150,12 @@ We analyze unconstrained SVD rank allocation for Llama-3-8B ($r$=0.8) using four
 Across all combinations, 50--80\% of dimensions are not 8-aligned.
 This confirms that misalignment is a \emph{structural property} of importance-based allocation, not an edge case.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/scatter_2x2_meta_llama_3_8b_instruct_r0.8.pdf}
+\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.8.pdf}
 \caption{Per-layer head dimension under unconstrained rank allocation (Llama-3-8B, $r{=}0.8$). Green = 8-aligned; red = misaligned. All four scoring methods produce 50--80\% misaligned dimensions.}
 \label{fig:dim_scatter}
-\end{figure}
+\end{figure*}
 
 \subsection{GEMM Alignment Sensitivity}
 \label{sec:gemm}
@@ -227,6 +227,24 @@ $d \in (160,256]$ & 192--256 & 128$\times$32 & 2.3--2.9\,ms & 3--4$\times$ \\
 \end{table}
 
 
+\subsection{GeMV (Decode) Alignment}
+\label{sec:gemv}
+
+During autoregressive decode, each token generates a GeMV ($M{=}1$) rather than a GEMM.
+Figure~\ref{fig:gemv_alignment} repeats the stride-1 sweep for GeMV.
+Unlike GEMM, aligned and misaligned values track each other closely---no mod-8/16 comb pattern emerges.
+The total variation (${\sim}$14\%) is far less than GEMM's 50--163\%.
+GeMV is memory-bound; cuBLAS selects memory-optimized kernels that internally pad dimensions, masking Tensor Core effects.
+GAC therefore targets \emph{prefill} (compute-bound GEMM), where alignment limits throughput.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_gemv_alignment.pdf}
+\caption{\textbf{GeMV alignment sensitivity} ($M{=}1$, stride-1 sweep near 4096). Unlike GEMM (Figure~\ref{fig:gemm_alignment}), aligned and misaligned values show no periodic separation---the alignment penalty is negligible for memory-bound decode.}
+\label{fig:gemv_alignment}
+\end{figure*}
+
+
 \subsection{Root Cause Summary}
 \label{sec:root_cause}
 
@@ -295,6 +313,7 @@ Rather than hard-coding alignment to fixed multiples (e.g., mod~8 or mod~32), GA
 For each projection, we profile GEMM and SDPA latency at dimensions near $r_i^*$ and retain only those that avoid performance cliffs.
 This produces $|C_i| \approx 11$--$17$ candidates per projection.
 Cliff dimensions---where cuBLAS switches kernel tier or SDPA falls back---are automatically excluded.
+For example, given an ideal rank $r^*{=}107.3$, the sweep produces $C{=}\{96, 104, 112, 128\}$, excluding 107 because it triggers a cuBLAS performance cliff; the DP then picks $r{=}104$, saving budget for more sensitive layers.
 Because the sweep is hardware-specific, GAC adapts to different GPU architectures without manual tuning.
 
 \subsection{Multi-Choice Knapsack DP}
@@ -434,32 +453,6 @@ The penalty grows from +19\% ($S{=}128$) to +38\% ($S{=}1024$): longer sequences
 At $S{=}128$ the model is still partially memory-bound, hiding some misalignment cost; by $S{=}1024$ the penalty is fully exposed.
 GAC maintains ${\sim}$12\% speedup over the \emph{uncompressed} baseline for $S \geq 256$, showing that aligned compression delivers both smaller models and faster inference.
 
-\subsection{Ablation: Rounding Strategies}
-
-Table~\ref{tab:ablation} compares four rounding strategies for ASVD rank allocation on Llama-3-8B:
-raw compressor output (\emph{Unaligned}, 59\% aligned), na\"ive \emph{Round-to-8/32}, and \emph{GAC~DP} with Fisher weighting.
-
-\begin{table}[t]
-\centering
-\caption{\textbf{Rounding strategy ablation} (ASVD, Llama-3-8B). Fisher value = $\sum f_i \cdot (r_i - r_i^*)$; higher is better.}
-\label{tab:ablation}
-\small
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}lcccc@{}}
-\toprule
-\textbf{Strategy} & \textbf{Align\%} & \textbf{PPL}$\downarrow$ & \textbf{Fisher}$\uparrow$ & \textbf{Rank range} \\
-\midrule
-Unaligned & 59\% & 14.44 & 2723 & [78, 512] \\
-Round-to-8 & 100\% & 14.44 & 2841 & [72, 512] \\
-Round-to-32 & 100\% & 14.44 & 2862 & [64, 512] \\
-\textbf{GAC DP} & \textbf{100\%} & \textbf{14.40} & \textbf{2953} & [8, 512] \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-All strategies achieve 100\% alignment, but GAC~DP maximizes Fisher value (2953 vs.\ 2841), yielding measurably lower PPL (14.40 vs.\ 14.44).
-GAC~DP uses the widest rank range ([8,~512]) by aggressively rounding down insensitive layers to allocate more budget to sensitive ones---a principled trade-off that uniform rounding cannot achieve.
-
 \subsection{Discussion}
 
 \paragraph{Why compression does not always speed up inference.}
@@ -470,8 +463,8 @@ Even the 83\% naturally-aligned dimensions cannot prevent the +38\% penalty beca
 
 \paragraph{Why prefill but not decode?}
 Autoregressive decode uses GeMV ($M{=}1$), which is memory-bound.
-Our GeMV profiling (Appendix~\ref{app:gemv}) shows only ${\sim}$14\% latency variation with no clear mod-8 pattern---cuBLAS selects memory-optimized kernels that internally pad dimensions.
-Alignment matters primarily in the compute-bound prefill regime where Tensor Core utilization directly limits throughput.
+As shown in \S\ref{sec:gemv}, GeMV exhibits only ${\sim}$14\% latency variation with no mod-8 pattern---cuBLAS selects memory-optimized kernels that internally pad dimensions.
+Alignment matters primarily in the compute-bound prefill regime where Tensor Core utilization limits throughput.
 
 \paragraph{Quantization.}
 GPTQ~\cite{gptq} and AWQ~\cite{awq} compress via reduced numerical precision, preserving tensor shapes and naturally avoiding collapse.
@@ -600,27 +593,6 @@ This confirms that L2 sector alignment, while measurable in microbenchmarks, is 
 \end{figure*}
 
 
-\section{GeMV (Decode) Alignment Analysis}
-\label{app:gemv}
-
-During autoregressive decode, each token generates a matrix-vector product (GeMV, $M{=}1$) rather than a GEMM.
-GeMV is memory-bound; alignment effects differ from prefill.
-
-Figure~\ref{fig:gemv_sweep} sweeps both $K$ and $N$ dimensions at stride 1 near 4096.
-Unlike GEMM (Figure~\ref{fig:gemm_alignment}), GeMV shows \emph{no clear mod-8 or mod-16 comb pattern}---the latency fluctuations are dominated by memory access patterns and cache behavior rather than Tensor Core alignment.
-The overall latency variation is ${\sim}$14\%, far less than the 50--163\% penalties observed in GEMM.
-
-This explains why GAC focuses on \emph{prefill} latency: the alignment penalty is fundamentally a compute-bound phenomenon.
-During decode, cuBLAS selects memory-optimized kernels that internally pad dimensions, masking the misalignment.
-
-\begin{figure*}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{figures/fig_gemv_fine_sweep.pdf}
-\caption{GeMV latency vs.\ $K$ (left) and $N$ (right) dimensions at stride 1. Unlike GEMM, no clear mod-8/16 alignment pattern is visible---GeMV is memory-bound, masking Tensor Core misalignment.}
-\label{fig:gemv_sweep}
-\end{figure*}
-
-
 \section{SVD Rank Distribution Across Compression Ratios}
 \label{app:scatter_ratios}
 
@@ -630,25 +602,29 @@ At every ratio, a substantial fraction (40--80\%) of dimensions are misaligned, 
 
 \begin{figure*}[h]
 \centering
-\begin{subfigure}[t]{0.48\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_meta_llama_3_8b_instruct_r0.5.pdf}
-\caption{$r$=0.5 (50\% compression)}
-\end{subfigure}\hfill
-\begin{subfigure}[t]{0.48\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_meta_llama_3_8b_instruct_r0.7.pdf}
-\caption{$r$=0.7 (30\% compression)}
+\begin{subfigure}[t]{\textwidth}
+\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.5.pdf}
+\caption{Llama-3-8B, $r$=0.5 (50\% compression)}
 \end{subfigure}
 
-\vspace{6pt}
-\begin{subfigure}[t]{0.48\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_meta_llama_3_8b_instruct_r0.9.pdf}
-\caption{$r$=0.9 (10\% compression)}
-\end{subfigure}\hfill
-\begin{subfigure}[t]{0.48\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_mistral_7b_v0_3_r0.8.pdf}
-\caption{Mistral-7B, $r$=0.8 (different model)}
+\vspace{4pt}
+\begin{subfigure}[t]{\textwidth}
+\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.7.pdf}
+\caption{Llama-3-8B, $r$=0.7 (30\% compression)}
 \end{subfigure}
-\caption{SVD rank distributions under unconstrained allocation at various compression ratios. (a--c): Llama-3-8B at $r$=0.5, 0.7, 0.9. (d): Mistral-7B at $r$=0.8. Green = 8-aligned; red = misaligned. Misalignment is pervasive across ratios and models.}
+
+\vspace{4pt}
+\begin{subfigure}[t]{\textwidth}
+\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.9.pdf}
+\caption{Llama-3-8B, $r$=0.9 (10\% compression)}
+\end{subfigure}
+
+\vspace{4pt}
+\begin{subfigure}[t]{\textwidth}
+\includegraphics[width=\textwidth]{figures/scatter_1x4_mistral_7b_v0_3_r0.8.pdf}
+\caption{Mistral-7B, $r$=0.8 (cross-model)}
+\end{subfigure}
+\caption{SVD rank distributions under unconstrained allocation at various compression ratios and models. Each row shows per-layer head dimensions under four scoring methods. Green = 8-aligned; red = misaligned. Misalignment (50--90\%) is pervasive across all ratios, methods, and model architectures.}
 \label{fig:scatter_ratios}
 \end{figure*}
 
