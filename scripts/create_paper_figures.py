@@ -934,7 +934,8 @@ def fig_gac_ranks(ranks_dir='results/gac_allocation'):
 
         ax.set_ylabel('Rank', fontsize=7)
         ax.tick_params(labelsize=6)
-        ax.text(0.02, 0.92, panel_title, transform=ax.transAxes,
+        label_y = 0.92 if proj_name == 'k_proj' else 0.72
+        ax.text(0.02, label_y, panel_title, transform=ax.transAxes,
                 fontsize=7, fontweight='bold', va='top')
         if proj_name == 'k_proj':
             ax.set_ylim(40, 550)
@@ -942,8 +943,9 @@ def fig_gac_ranks(ranks_dir='results/gac_allocation'):
             ax.set_ylim(350, 530)
 
     axes[1].set_xlabel('Layer', fontsize=7)
-    axes[0].legend(fontsize=5, loc='lower left', framealpha=0.8,
-                   ncol=4, handletextpad=0.3, columnspacing=0.6, borderpad=0.2)
+    for ax in axes:
+        ax.legend(fontsize=5, loc='best', framealpha=0.8,
+                  ncol=2, handletextpad=0.3, columnspacing=0.6, borderpad=0.2)
     axes[1].set_xticks([0, 4, 8, 12, 16, 20, 24, 28, 31])
 
     fig.subplots_adjust(left=0.13, right=0.97, top=0.95, bottom=0.13, hspace=0.12)
@@ -951,6 +953,74 @@ def fig_gac_ranks(ranks_dir='results/gac_allocation'):
     fig.savefig(OUTPUT_DIR / 'fig_gac_ranks.png')
     plt.close()
     print("Saved: fig_gac_ranks.pdf (per-layer rank comparison)")
+
+
+def fig_prefill_scaling(results_path='results/llmpruner_llama3_v2/results.json'):
+    """LLM-Pruner prefill latency bar chart across sequence lengths."""
+    p = Path(results_path)
+    if not p.exists():
+        print(f"Skipping fig_prefill_scaling: {p} not found")
+        return
+
+    with open(p) as f:
+        results = json.load(f)
+
+    # Extract data by strategy
+    data = {}
+    for r in results:
+        strat = r['strategy']
+        lat = r.get('prefill_latency', {})
+        data[strat] = {int(k): v['mean_ms'] for k, v in lat.items()}
+
+    seq_lens = sorted(data['baseline'].keys())
+    baseline_vals = [data['baseline'][s] for s in seq_lens]
+    unaligned_vals = [data['pruned'][s] for s in seq_lens]
+    gac_vals = [data['pruned_r8'][s] for s in seq_lens]
+
+    x = np.arange(len(seq_lens))
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(3.3, 2.2))
+
+    bars_base = ax.bar(x - width, baseline_vals, width, label='Baseline',
+                       color=COLORS['neutral'], alpha=0.7, edgecolor='white', linewidth=0.5)
+    bars_unal = ax.bar(x, unaligned_vals, width, label='Unaligned',
+                       color=COLORS['misaligned'], alpha=0.45, edgecolor='white', linewidth=0.5)
+    bars_gac = ax.bar(x + width, gac_vals, width, label='GAC',
+                      color=COLORS['success'], alpha=0.45, edgecolor='white', linewidth=0.5)
+
+    # Annotate percentage change vs baseline, centered above each bar
+    for i, s in enumerate(seq_lens):
+        base = baseline_vals[i]
+        unal = unaligned_vals[i]
+        gac = gac_vals[i]
+
+        pct_unal = (unal - base) / base * 100
+        pct_gac = (gac - base) / base * 100
+
+        # Unaligned label: centered above its bar
+        ax.text(x[i], unal + 2, f'{pct_unal:+.0f}%',
+                ha='center', va='bottom',
+                fontsize=5.5, fontweight='bold', color=COLORS['misaligned'])
+
+        # GAC label: slightly right of its bar center
+        ax.text(x[i] + width + 0.08, gac + 2, f'{pct_gac:+.0f}%',
+                ha='center', va='bottom',
+                fontsize=5.5, fontweight='bold', color=COLORS['success'])
+
+    ax.set_xlabel('Sequence Length', fontsize=7)
+    ax.set_ylabel('Prefill Latency (ms)', fontsize=7)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(s) for s in seq_lens])
+    ax.tick_params(labelsize=6)
+    ax.set_ylim(0, max(unaligned_vals) * 1.15)
+    ax.legend(fontsize=6, loc='upper left', framealpha=0.8)
+
+    fig.subplots_adjust(left=0.15, right=0.97, top=0.95, bottom=0.15)
+    fig.savefig(OUTPUT_DIR / 'fig_prefill_scaling.pdf')
+    fig.savefig(OUTPUT_DIR / 'fig_prefill_scaling.png')
+    plt.close()
+    print("Saved: fig_prefill_scaling.pdf (prefill latency bar chart)")
 
 
 def main():
@@ -967,6 +1037,7 @@ def main():
     fig6_e2e_performance()
     fig_alignment_sweep_compact()
     fig_gac_ranks()
+    fig_prefill_scaling()
 
     print("=" * 50)
     print(f"All figures saved to: {OUTPUT_DIR}")

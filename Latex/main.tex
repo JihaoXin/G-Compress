@@ -20,6 +20,7 @@
 \usepackage{placeins}
 \usepackage{colortbl}
 \usepackage{enumitem}
+\hfuzz=0pt  % Strict: report ALL overfull boxes
 
 %% Compact spacing
 \setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
@@ -102,15 +103,15 @@ These are not edge cases---across four scoring methods (Fisher, magnitude, activ
 
 \paragraph{Three pathways to dimensional collapse.}
 Different compression techniques alter different GEMM dimensions:
-\textbf{(i)}~SVD/low-rank decomposition changes the $K$ dimension (inner rank);
-\textbf{(ii)}~structured pruning changes the $N$ dimension (output features);
-\textbf{(iii)}~token eviction changes the $M$ dimension (sequence length).
+\textbf{(i)} SVD/low-rank decomposition changes the $K$ dimension (inner rank);
+\textbf{(ii)} Structured pruning changes the $N$ dimension (output features);
+\textbf{(iii)} Token eviction changes the $M$ dimension (sequence length).
 Each pathway has distinct alignment sensitivities (\S\ref{sec:analysis}).
 
 \paragraph{Contributions.}
-\textbf{(1)}~A systematic full-st ack analysis of dimensional collapse across three levels---framework, library, and hardware---quantifying per-mechanism penalties on A100 (\S\ref{sec:analysis}).
+\textbf{(1)}~A systematic full-stack analysis of dimensional collapse across three levels---framework, library, and hardware---quantifying per-mechanism penalties on A100 (\S\ref{sec:analysis}).
 \textbf{(2)}~\textbf{GAC}: a general framework that wraps any compressor and selects aligned dimensions via dimension-level profiling and multi-choice knapsack DP, maximizing Fisher-weighted information preservation under the parameter budget (\S\ref{sec:gac}).
-\textbf{(3)}~End-to-end evaluation on Llama-3-8B with ASVD~\cite{asvd} (SVD factorization) and LLM-Pruner~\cite{llmpruner} (structured pruning), showing that GAC achieves 100\% alignment with up to 1.5$\times$ prefill speedup (\S\ref{sec:eval}).
+\textbf{(3)}~End-to-end evaluation on Llama-3-8B with ASVD \cite{asvd} (SVD factorization) and LLM-Pruner \cite{llmpruner} (structured pruning), showing GAC achieves 100\% alignment with up to 1.5$\times$ prefill speedup (\S\ref{sec:eval}).
 
 
 %% ===========================================
@@ -125,7 +126,7 @@ For FP16 on A100, the MMA instruction \texttt{mma.m16n8k16} requires $K \bmod 16
 Misaligned dimensions force instruction downgrade or padding.
 
 \paragraph{SDPA Backends.}
-PyTorch's SDPA~\cite{pytorch_sdpa} dispatches to FlashAttention\nobreakdash-2 (FA2)~\cite{flashattention2}, MEM\_EFFICIENT, or MATH.
+PyTorch's SDPA~\cite{pytorch_sdpa} leverages FlashAttention\nobreakdash-2 (FA2)~\cite{flashattention2}, MEM\_EFFICIENT, or MATH.
 FA2 picks the smallest template ${\geq}\,d$ from \{64, 96, \ldots, 256\}; each boundary halves tile width $B_c$, doubling iterations.
 MEM\_EFFICIENT needs $d \bmod 8 {=} 0$; otherwise MATH is used (up to $12{\times}$ slower).
 
@@ -140,15 +141,14 @@ Structured pruning~\cite{llmpruner,sparsegpt} removes neurons by importance, alt
 \section{Analysis: Dimensional Collapse}
 \label{sec:analysis}
 
-All experiments run on NVIDIA A100-80GB (PyTorch 2.9.1, CUDA 12.8, FP16).
-Latency uses CUDA event timing (warmup=50, measure=200, 3 trials).
+All experiments run on NVIDIA A100-80GB with PyTorch 2.9.1, CUDA 12.8, FP16.
+Latency uses CUDA event timing with 50 warmup and 200 measurement iterations across 3 trials.
 
 \subsection{Dimension Distribution in Practice}
 \label{sec:distribution}
 
-We analyze unconstrained SVD rank allocation for Llama-3-8B ($r$=0.8) using four importance scoring methods across all projections (Figure~\ref{fig:dim_scatter}).
-Across all combinations, 50--80\% of dimensions are not 8-aligned.
-This confirms that misalignment is a \emph{structural property} of importance-based allocation, not an edge case.
+We analyze unconstrained SVD rank allocation on Llama-3-8B ($r{=}0.8$) with four importance scoring methods across all projections (Figure~\ref{fig:dim_scatter}).
+Across all combinations, 50--80\% of dimensions are not 8-aligned, confirming that misalignment is a \emph{structural property} of importance-based allocation, not an edge case.
 
 \begin{figure*}[t]
 \centering
@@ -160,7 +160,7 @@ This confirms that misalignment is a \emph{structural property} of importance-ba
 \subsection{GEMM Alignment Sensitivity}
 \label{sec:gemm}
 
-We sweep each GEMM dimension independently while fixing the others at typical LLM sizes ($M$=2048, $N$=2048, $K$=128).
+We sweep each GEMM dimension independently while fixing others at typical LLM sizes ($M{=}2048$, $N{=}2048$, $K{=}128$).
 Figure~\ref{fig:gemm_alignment} shows the results.
 
 \begin{figure*}[t]
@@ -332,7 +332,6 @@ Figure~\ref{fig:alg_gac} gives the complete procedure.
 \begin{figure}[t]
 \centering
 \rule{\columnwidth}{0.5pt}
-\vspace{-6pt}
 \begin{minipage}{0.94\columnwidth}\small
 \textbf{Algorithm:} GAC --- GPU-Aligned Compression\\[2pt]
 \textbf{Input:} Pre-trained LLM, compressor, budget $B$\\
@@ -449,7 +448,7 @@ Figure~\ref{fig:prefill_scaling} shows LLM-Pruner prefill latency at four sequen
 \label{fig:prefill_scaling}
 \end{figure}
 
-The penalty grows from +19\% ($S{=}128$) to +38\% ($S{=}1024$): longer sequences push GEMMs deeper into the compute-bound regime, where Tensor Core utilization---and thus alignment---dominates.
+The penalty grows from +19\% ($S{=}128$) to +38\% ($S{=}1024$): longer sequences push GEMMs deeper into the compute-bound regime, where Tensor Core utilization and thus alignment dominate.
 At $S{=}128$ the model is still partially memory-bound, hiding some misalignment cost; by $S{=}1024$ the penalty is fully exposed.
 GAC maintains ${\sim}$12\% speedup over the \emph{uncompressed} baseline for $S \geq 256$, showing that aligned compression delivers both smaller models and faster inference.
 
@@ -489,7 +488,7 @@ Quantization~\cite{gptq,awq} preserves dimensions via fixed-width groups, natura
 Pruning~\cite{sparsegpt,wanda,llmpruner} and KV cache compression~\cite{h2o,quest,pyramidkv} may alter dimensions but do not consider hardware alignment.
 All target memory reduction; none address GPU performance cliffs caused by irregular dimensions.
 
-\paragraph{Existing hardware-aware approaches fall short.}
+\paragraph{Existing hardware-aware approaches fail to address the root cause.}
 HALP~\cite{halp2021} formulates CNN pruning as latency-budgeted optimization using end-to-end timing.
 HALOC~\cite{haloc2023} uses a differentiable latency prediction model for CNN low-rank compression.
 Both are tied to specific compression methods and model families, provide no guarantee on compression ratio, and do not understand the hardware root cause---they measure aggregate latency without isolating dimensional misalignment.
@@ -503,20 +502,16 @@ GAC prevents misalignment at compression time, eliminating the need for runtime 
 
 
 %% ===========================================
-%% 7. CONCLUSION
+%% 7. LIMITATIONS AND FUTURE WORK
 %% ===========================================
-\section{Conclusion}
-\label{sec:conclusion}
+\section{Limitations and Future Work}
+\label{sec:limitations}
 
-We present the first systematic study of dimensional collapse in compressed LLMs, showing how irregular tensor dimensions degrade GPU performance at every stack level: SDPA backend selection (up to 200\%), cuBLAS kernel tier (up to 163\%), and Tensor Core misalignment (up to 57\%).
-Our GAC framework wraps any compressor, profiles dimension-level latency, and selects aligned allocations via multi-choice knapsack DP---achieving 100\% alignment with 1.5$\times$ prefill speedup on ASVD and 1.6$\times$ on LLM-Pruner, preserving model quality.
-The key insight is that alignment is not just a nice-to-have property but a \emph{prerequisite} for compression to deliver its promised speedup.
-As alignment constraints tighten across GPU generations (Hopper TMA, FP8 Tensor Cores), alignment-aware compression becomes essential.
-
-\paragraph{Limitations and Future Work.}
-Our experiments use A100 with FA2.
-Adapting GAC to H100/Blackwell (stricter TMA, FP8 constraints), composing with quantization, and post-GAC finetuning for quality recovery remain as future directions.
-Code and data will be released upon publication.
+All benchmarks are conducted on A100 with FlashAttention-2; newer architectures (H100, Blackwell) impose stricter alignment constraints (TMA descriptors, FP8 Tensor Cores) that may amplify the penalties we observe.
+The current GAC prototype operates as an offline post-processing pass rather than an integrated compression framework: it reads a compressed checkpoint, re-allocates ranks via DP, and writes a new checkpoint.
+A production-ready implementation should integrate directly into compression libraries so that alignment-aware allocation happens automatically during compression.
+We also study SVD and structured pruning in isolation; how alignment constraints interact when multiple techniques are composed (e.g., SVD + GPTQ) remains open.
+Finally, GAC redistributes rank budgets without retraining---a lightweight post-GAC finetuning pass could further recover quality at aggressive compression ratios.
 
 
 %% ===========================================
