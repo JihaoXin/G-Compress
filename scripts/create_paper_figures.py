@@ -325,7 +325,7 @@ def fig3_palu_distribution():
                 markeredgewidth=0.3, zorder=5)
 
     ax.set_xlabel('Layer', fontsize=10)
-    ax.set_ylabel('Per-Head Dim', fontsize=10)
+    ax.set_ylabel('K Head Dim', fontsize=10)
     ax.set_xlim(-1, len(dims))
     ax.set_ylim(min(dims) - 8, max(dims) + 8)
     ax.tick_params(labelsize=9)

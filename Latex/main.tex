@@ -92,7 +92,6 @@ On Llama-3-8B with two representative compressors---ASVD (SVD factorization) and
 Large Language Models (LLMs) achieve strong capabilities but their scale poses deployment challenges~\cite{llama3}.
 Post-training compression reduces model size which can be categorized into three categories: \emph{quantization} (reduced precision)~\cite{gptq,awq}, \emph{sparsification} (zeroing weights)~\cite{sparsegpt,wanda}, and \emph{dimension reduction} (low-rank factorization, structured pruning, KV cache eviction)~\cite{asvd,palu,llmpruner,h2o,pyramidkv}.
 We focus on \textbf{dimension reduction}: it alters the tensor shapes that feed the dominant inference operators, which often produce \emph{irregular} dimensions (e.g., reduced rank from 128 to 107), which is inefficient in GPU's execution, and leads to a counterintuitive outcome: \emph{compressed models with \textbf{smaller} parameters can run \textbf{slower} than uncompressed models}. We term this \textbf{dimensional misalignment}.
-
 We summarize three classes of compression algorithms that lead to dimensional misalignment: \textbf{(i)}~low-rank factorization (decomposing weight matrices into two smaller matrices $W \approx A \cdot B$, truncating inner dimension),~\cite{asvd,palu,svdllm2024}; \textbf{(ii)}~structured pruning (removing neurons or heads, reducing output dimension),~\cite{llmpruner,sparsegpt,wanda}; \textbf{(iii)}~token eviction (dropping or compressing keys/values, reducing effective sequence length),~\cite{h2o,pyramidkv}.
 
 Existing compression methods predominantly trade off \emph{size and accuracy}: given a compression ratio, they maximize preserved accuracy while ignoring how chosen dimensions interact with hardware.
@@ -111,33 +110,64 @@ We propose \textbf{GAC} (GPU-Aligned Compression), a new compression \emph{parad
 \section{Dimensional Misalignment}
 \label{sec:misalignment}
 
-Existing dimension-reducing compressors allocate rank or width from importance scores and a global compression ratio, without hardware alignment constraints.
-SVD and low-rank methods set per-layer rank $r_i$ from Fisher, magnitude, or activation scores; structured pruning sets output dimension $N$ from neuron importance; KV cache methods alter effective sequence length $M$.
-Because these scores are continuous-valued, the chosen dimensions are typically \emph{irregular} (e.g., 107, 149, 305) and often violate GPU alignment requirements ($d \bmod 8 = 0$ or template boundaries), triggering backend fallbacks and kernel switches that erase the expected speedup from fewer FLOPs.
+Existing LLM compression aims to preserve accuracy under a given compression ratio $\rho$.
+Formally, given the set of pretrained parameters $\mathcal{W}$, we seek a compressed set $\mathcal{W}'$ that minimizes expected loss subject to the size constraint:
+\begin{equation}
+\min_{\mathcal{W}'} \; \mathbb{E}_{(x,y)\sim\mathcal{D}}[\mathcal{L}(\mathcal{W}'; x, y)] \quad \text{s.t.} \quad 1-|\mathcal{W}'|/|\mathcal{W}| \leq \rho.
+\label{eq:compression_target}
+\end{equation}
+Here $\mathcal{D}$ is the data distribution, $\mathcal{L}$ is the loss, $|\mathcal{W}'|$ and $|\mathcal{W}|$ denote total parameter counts. We denote $B = (1-\rho)|\mathcal{W}|$ as the parameter budget.
 
-A concrete example is PaLU~\cite{palu} on Llama-3-8B at 20\% compression: unconstrained rank allocation yields head dimensions such as 107, 149, 305---none multiples of 8.
-Figure~\ref{fig:palu_dist} shows the resulting per-layer rank distribution; a large fraction of layers end up misaligned (e.g., 78\% in this setup), so prefill latency can increase despite reduced parameter count.
+Different parameters have different compression sensitivities, e.g., early and late layers are often more critical than middle layers---so budget cannot be allocated uniformly.
+Existing methods proceed in two steps.
+First, for each parameter $W_i$, compute an \textbf{importance score} $s_i$ using a proxy (Table~\ref{tab:importance_scores}); a higher $s_i$ reflects higher sensitivity thus should retain more parameters in $W_i$.
+Second, allocate the budget $B$ by assigning each $W_i$ a dimension $d_i$ thus that more important $W_i$ receive larger $d_i$:
+\begin{equation}
+\{d_i\} = \arg\max_{\{d_i\}} \sum_i s_i \cdot |W_i| \quad \text{s.t.} \quad |\mathcal{W}'| \leq B, \quad d_i \geq 0.
+\label{eq:budget_allocation}
+\end{equation}
+Here $d_i$ is the compressed dimension (e.g., inner rank or output width, varies by compression method), $|W_i|$ is the parameter count given dimension $d_i$, $|\mathcal{W}'| = \sum_i |W_i|$ is the total parameter count of the compressed model, and $B$ is the parameter budget.
+Because $s_i$ and the optimum $\{d_i\}$ are continuous, the resulting dimensions are typically \emph{irregular} (e.g., 107, 108, 109) and often violate GPU alignment requirements (e.g.\ $d \bmod 8 = 0$), triggering backend fallbacks and kernel switches that erase the expected speedup from fewer parameters and FLOPs.
 
+We exemplify the dimensional misalignment problem with a real-world example: PaLU~\cite{palu}.
+We use \textbf{8-alignment} ($d \bmod 8 = 0$) as a concrete example of alignment constraints.
+Figure~\ref{fig:palu_dist} shows that a large fraction of layers end up misaligned (e.g., 78\% in this setup).
+When dimensions are not 8-aligned, latency can increase by up to 90\% (Figure~\ref{fig:sdpa_latency}); we detail this analysis in \S\ref{sec:analysis}.
+For generality, we summarize the mainstream importance score proxies into four categories (Table~\ref{tab:importance_scores}).
+We empirically measure unconstrained dimension allocation on Llama-3-8B at $\rho=20\%$ with all four proxies, Figure~\ref{fig:dim_scatter} demonstrates the dimensional misalignment consistently occurs across different methods.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig3_palu_dist.png}
-\caption{PaLU on Llama-3-8B (20\% compression). Per-layer head dimension after unconstrained rank allocation; red = misaligned ($d \bmod 8 \neq 0$). A majority of layers are misaligned, leading to GPU performance cliffs.}
+\caption{Llama-3-8B after PaLU compression at $\rho=20\%$.}
 \label{fig:palu_dist}
 \end{figure}
 
-Budget allocation in current practice is driven by four families of importance scores: \textbf{magnitude} ($\|W_i\|_F$, SVD-LLM), \textbf{activation} ($\|X_i\|_F$, ASVD), \textbf{gradient} (Taylor-style, Taylor Pruning), and \textbf{Fisher} ($\mathrm{tr}(\mathbf{F}_i)$, PaLU, FWSVD).
-All produce continuous-valued scores, so allocated ranks are naturally irregular.
-Figure~\ref{fig:overview} summarizes the problem: unconstrained compression yields misaligned dimensions (e.g., $d{=}107$) and large latency increases; aligning to hardware-friendly values (e.g., $d{=}112$) recovers performance with minimal memory overhead.
-Across four scoring methods and all projections of Llama-3-8B at $r{=}0.8$, 50--80\% of unconstrained dimensions are misaligned (Figure~\ref{fig:dim_scatter}).
-
-\input{figures/fig1_overview.tex}
+\begin{table}[t]
+\centering
+\caption{Mainstream importance score for budget allocation.}
+\label{tab:importance_scores}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Method} & \textbf{Score} & \textbf{Intuition} & \textbf{Works} \\
+\midrule
+Magnitude & $\|W_i\|_F$ & Weight norm & SVD-LLM~\cite{svdllm2024} \\
+Activation & $\|X_i\|_F$ & Input magnitude & ASVD~\cite{asvd} \\
+Gradient & $\left|\frac{\partial \mathcal{L}}{\partial h_i} \cdot h_i\right|$ & Taylor expansion & Taylor Pruning~\cite{taylor_pruning} \\
+Fisher & $\mathrm{tr}(\mathbf{F}_i)$ & Curvature of loss & PaLU~\cite{palu}, FWSVD~\cite{fwsvd2022} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.8.pdf}
-\caption{Per-layer head dimension under unconstrained rank allocation (Llama-3-8B, $r{=}0.8$). Green = 8-aligned; red = misaligned. All four scoring methods (magnitude, activation, gradient, Fisher) produce 50--80\% misaligned dimensions.}
+\caption{Llama-3-8B at $\rho=20\%$. Shape: $\circ{=}$Q Head, $\square{=}$K Head, $\triangle{=}$V Head; color: \textcolor{cgreen}{green}=8-aligned, \textcolor{cred}{red}=misaligned.}
 \label{fig:dim_scatter}
 \end{figure*}
+
+\input{figures/fig1_overview.tex}
 
 
 %% ===========================================
@@ -153,7 +183,7 @@ Table~\ref{tab:constraints} summarizes the constraints and typical penalties; th
 
 \begin{table}[t]
 \centering
-\caption{Full-stack alignment constraint summary (A100, FP16).}
+\caption{Full-stack alignment constraint summary.}
 \label{tab:constraints}
 \small
 \setlength{\tabcolsep}{2.5pt}
@@ -180,14 +210,14 @@ The framework chooses the SDPA implementation and, for FlashAttention-2 (FA2), t
 When $d \bmod 8 \neq 0$, PyTorch falls back to the MATH backend (up to $\sim$12$\times$ slower); when $d$ is 8-aligned but crosses FA2 template boundaries (e.g., 64, 96, 128, 160, 192, 224, 256), tile width $B_c$ halves and latency jumps.
 
 We sweep \texttt{head\_dim} from 64 to 256 ($B{=}4$, $S{=}2048$, $H{=}32$).
-Figure~\ref{fig:sdpa_latency} shows the staircase pattern: FA2 picks the smallest template $t \geq d$; $B_c$ halves at major boundaries (e.g., $128 \to 64 \to 32$), so crossing $d{=}128 \to 129$ causes $\sim$90\% latency increase.
+As shown in Figure~\ref{fig:sdpa_latency}, FA2 picks the smallest template $t \geq d$; $B_c$ halves at major boundaries (e.g., $128 \to 64 \to 32$), so crossing $d{=}128 \to 129$ causes $\sim$90\% latency increase.
 Non-8-aligned dimensions trigger MATH fallback---e.g., $d{=}107$ incurs 2.14\,ms (+40\% vs $d{=}112$ at 1.53\,ms on Flash).
-Table~\ref{tab:fa2_templates} quantifies the tiers.
+Figure~\ref{fig:sdpa_latency} shows the staircase; Table~\ref{tab:fa2_templates} quantifies the tiers.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig2_sdpa_latency.pdf}
-\caption{SDPA latency vs.\ \texttt{head\_dim} (64--256). Green: Flash backend; red: Math fallback ($d \bmod 8 \neq 0$). Shaded regions show FA2 template tiers ($B_r \times B_c$). Cliff at $d{=}128 \to 129$ causes +90\% latency.}
+\caption{SDPA latency vs.\ \texttt{head\_dim} (64--256). When $d \bmod 8 \neq 0$, the MATH fallback is used (red); crossing template boundaries (e.g., $d{=}128 \to 129$) causes up to $\sim$90\% latency increase.}
 \label{fig:sdpa_latency}
 \end{figure}
 
@@ -561,7 +591,7 @@ This confirms that L2 sector alignment, while measurable in microbenchmarks, is 
 \label{app:scatter_ratios}
 
 The misalignment problem persists across different compression ratios.
-Figure~\ref{fig:scatter_ratios} shows dimension scatter plots for Llama-3-8B under unconstrained SVD allocation at five compression levels ($r$=0.5, 0.6, 0.7, 0.8, 0.9) using the Fisher scoring method.
+Figure~\ref{fig:scatter_ratios} shows dimension scatter plots for Llama-3-8B under unconstrained SVD allocation at five compression levels ($\rho=0.5$, 0.6, 0.7, 0.8, 0.9) using the Fisher scoring method.
 At every ratio, a substantial fraction (40--80\%) of dimensions are misaligned, confirming that dimensional misalignment is inherent to importance-based rank allocation, not an artifact of aggressive compression.
 
 \begin{figure*}[h]
@@ -586,7 +616,7 @@ At every ratio, a substantial fraction (40--80\%) of dimensions are misaligned, 
 \vspace{4pt}
 \begin{subfigure}[t]{\textwidth}
 \includegraphics[width=\textwidth]{figures/scatter_1x4_mistral_7b_v0_3_r0.8.pdf}
-\caption{Mistral-7B, $r$=0.8 (cross-model)}
+\caption{Mistral-7B, $\rho=0.8$ (cross-model)}
 \end{subfigure}
 \caption{SVD rank distributions under unconstrained allocation at various compression ratios and models. Each row shows per-layer head dimensions under four scoring methods. Green = 8-aligned; red = misaligned. Misalignment (50--90\%) is pervasive across all ratios, methods, and model architectures.}
 \label{fig:scatter_ratios}
