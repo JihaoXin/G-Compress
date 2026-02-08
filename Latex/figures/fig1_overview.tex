@@ -1,4 +1,4 @@
-% fig1_overview.tex — Dimensional Collapse Overview (TikZ)
+% fig1_overview.tex — Dimensional Misalignment Overview (TikZ)
 % Usage: \input{figures/fig1_overview.tex}
 \begin{figure*}[t]
 \centering
@@ -18,7 +18,7 @@
                  rounded corners=2pt, inner sep=4pt}
   ]
 
-  % ===== (a) Left panel: Dimensional Collapse Problem =====
+  % ===== (a) Left panel: Dimensional Misalignment Problem =====
   \begin{scope}[local bounding box=panelA]
     % Original model
     \node[box, fill={rgb,255:red,55;green,131;blue,187}] (orig) {
@@ -51,7 +51,7 @@
   \end{scope}
 
   % Panel (a) title
-  \node[above=0.2cm of panelA.north, font=\sffamily\bfseries] {(a) Dimensional Collapse Problem};
+  \node[above=0.2cm of panelA.north, font=\sffamily\bfseries] {(a) Dimensional Misalignment Problem};
 
   % ===== (b) Right panel: Dimension Repair Solution =====
   \begin{scope}[xshift=9.6cm, local bounding box=panelB]
@@ -94,6 +94,6 @@
     ([xshift=4.65cm]panelA.north) -- ([xshift=4.65cm]panelA.south);
 
 \end{tikzpicture}
-\caption{\textbf{Dimensional collapse overview.} (a)~Unconstrained SVD compression produces irregular dimensions. Across four importance scoring methods and all projection matrices, 43--91\% of dimensions would be misaligned, triggering GPU performance cliffs via Tensor Core and memory alignment violations. (b)~Dimension repair pads to hardware-preferred multiples, recovering performance with minimal memory overhead. See \S\ref{sec:distribution} for distribution analysis and \S\ref{sec:root_cause} for root causes.}
+\caption{\textbf{Dimensional misalignment overview.} (a)~Unconstrained SVD compression produces irregular dimensions. Across four importance scoring methods and all projection matrices, 43--91\% of dimensions would be misaligned, triggering GPU performance cliffs via Tensor Core and memory alignment violations. (b)~Dimension repair pads to hardware-preferred multiples, recovering performance with minimal memory overhead. See \S\ref{sec:misalignment} for dimension distribution and \S\ref{sec:analysis} for root causes.}
 \label{fig:overview}
 \end{figure*}
