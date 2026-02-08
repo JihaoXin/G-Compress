@@ -129,10 +129,9 @@ Second, allocate the budget $B$ by assigning each $W_i$ a dimension $d_i$ thus t
 Here $d_i$ is the compressed dimension (e.g., inner rank or output width, varies by compression method), $|W_i|$ is the parameter count given dimension $d_i$, $|\mathcal{W}'| = \sum_i |W_i|$ is the total parameter count of the compressed model, and $B$ is the parameter budget.
 Because $s_i$ and the optimum $\{d_i\}$ are continuous, the resulting dimensions are typically \emph{irregular} (e.g., 107, 108, 109) and often violate GPU alignment requirements (e.g.\ $d \bmod 8 = 0$), triggering backend fallbacks and kernel switches that erase the expected speedup from fewer parameters and FLOPs.
 
-We exemplify the dimensional misalignment problem with a real-world example: PaLU~\cite{palu}.
-We use \textbf{8-alignment} ($d \bmod 8 = 0$) as a concrete example of alignment constraints.
+We demonstrate the dimensional misalignment problem with a real-world example: PaLU~\cite{palu}.
+We use \textbf{8-alignment} ($d \bmod 8 = 0$) as an example of alignment constraints. When dimensions are not 8-aligned, latency can increase by up to 90\% (Figure~\ref{fig:sdpa_latency}); we detail this analysis in \S\ref{sec:analysis}.
 Figure~\ref{fig:palu_dist} shows that a large fraction of layers end up misaligned (e.g., 78\% in this setup).
-When dimensions are not 8-aligned, latency can increase by up to 90\% (Figure~\ref{fig:sdpa_latency}); we detail this analysis in \S\ref{sec:analysis}.
 For generality, we summarize the mainstream importance score proxies into four categories (Table~\ref{tab:importance_scores}).
 We empirically measure unconstrained dimension allocation on Llama-3-8B at $\rho=20\%$ with all four proxies, Figure~\ref{fig:dim_scatter} demonstrates the dimensional misalignment consistently occurs across different methods.
 \begin{figure}[t]
@@ -166,8 +165,6 @@ Fisher & $\mathrm{tr}(\mathbf{F}_i)$ & Curvature of loss & PaLU~\cite{palu}, FWS
 \caption{Llama-3-8B at $\rho=20\%$. Shape: $\circ{=}$Q Head, $\square{=}$K Head, $\triangle{=}$V Head; color: \textcolor{cgreen}{green}=8-aligned, \textcolor{cred}{red}=misaligned.}
 \label{fig:dim_scatter}
 \end{figure*}
-
-\input{figures/fig1_overview.tex}
 
 
 %% ===========================================

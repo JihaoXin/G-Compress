@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Rectangle, Wedge
 from matplotlib.lines import Line2D
+from matplotlib.ticker import MultipleLocator
 from pathlib import Path
 from collections import Counter
 
@@ -310,12 +311,15 @@ def fig3_palu_distribution():
     dims = data['dims_per_head']  # 32 layers
     layers = list(range(len(dims)))
 
-    fig, ax = plt.subplots(figsize=(3.4, 2.2))
+    fig, ax = plt.subplots(figsize=(3.4, 1.75))
 
-    # Horizontal reference bands at 8-aligned values
-    for val in [56, 64, 72, 80, 88, 96, 104, 112, 120, 128]:
-        if min(dims) - 10 <= val <= max(dims) + 10:
-            ax.axhline(val, color=COLORS['aligned'], alpha=0.15, linewidth=6, zorder=0)
+    ymin, ymax = min(dims) - 8, max(dims) + 8
+    # Background: alternating horizontal bands every 8 units (8-aligned grid)
+    band_lo = (int(ymin) // 8) * 8
+    band_hi = ((int(ymax) + 7) // 8) * 8
+    shade_colors = ['#E8F5E9', 'white']  # light green, white
+    for i, y0 in enumerate(range(band_lo, band_hi, 8)):
+        ax.axhspan(y0, y0 + 8, facecolor=shade_colors[i % 2], alpha=0.5, zorder=0)
 
     # Draw stems and markers manually for per-color control
     colors = [COLORS['aligned'] if d % 8 == 0 else COLORS['misaligned'] for d in dims]
@@ -327,7 +331,8 @@ def fig3_palu_distribution():
     ax.set_xlabel('Layer', fontsize=10)
     ax.set_ylabel('K Head Dim', fontsize=10)
     ax.set_xlim(-1, len(dims))
-    ax.set_ylim(min(dims) - 8, max(dims) + 8)
+    ax.set_ylim(ymin, ymax)
+    ax.yaxis.set_major_locator(MultipleLocator(16))
     ax.tick_params(labelsize=9)
 
     # Legend
@@ -337,7 +342,7 @@ def fig3_palu_distribution():
         Line2D([0], [0], marker='o', color='w', markerfacecolor=COLORS['misaligned'],
                markersize=6, label='Misaligned'),
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=8,
+    ax.legend(handles=legend_elements, loc='lower left', fontsize=8,
               framealpha=0.9, edgecolor='none')
 
     ax.spines['top'].set_visible(False)
