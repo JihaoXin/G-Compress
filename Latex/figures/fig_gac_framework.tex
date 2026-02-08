@@ -33,7 +33,7 @@
 
   % Step 2: Dimension Sweep
   \node[phase, corange, text=white] (sweep) at (7.6, 0) {
-    \textbf{Dimensional}\\[1pt]
+    \textbf{Dimension}\\[1pt]
     \textbf{Sweep}
   };
 
@@ -52,8 +52,8 @@
 
   % Arrows
   \draw[arrow] (input) -- (analysis);
-  \draw[arrow] (analysis) -- (sweep) node[midway, above=2pt, lbl] {constraints};
-  \draw[arrow] (sweep) -- (dp) node[midway, above=2pt, lbl] {candidates};
+  \draw[arrow] (analysis) -- (sweep) node[midway, above=2pt, lbl] {Constraints};
+  \draw[arrow] (sweep) -- (dp) node[midway, above=2pt, lbl] {Candidates};
   \draw[arrow] (dp) -- (output) node[midway, above=2pt, lbl] {Dimensions};
 
 \end{tikzpicture}
