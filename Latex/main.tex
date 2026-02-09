@@ -193,7 +193,7 @@ Root causes fall into three layers (Figure~\ref{fig:fullstack_overview}): Framew
     \draw[arrow] (fw) -- (lib) node[midway, lbl] {Dispatch};
     \draw[arrow] (lib) -- (hw) node[midway, lbl] {Execute};
   \end{tikzpicture}
-  \caption{Hierarchy of the analysis' three layers.}
+  \caption{Hierarchical Analysis.}
   \label{fig:fullstack_overview}
   \end{figure}
 
@@ -309,77 +309,85 @@ These penalties compound: a single misaligned dimension can trigger a backend fa
 \label{sec:gac}
 
 \input{figures/fig_gac_framework.tex}
-
+\begin{algorithm}[t]
+  \caption{GAC algorithm.}
+  \label{alg:gac}
+  \small
+  \begin{algorithmic}[1]
+  \Require Model $\mathcal{M}$, compressor $\mathcal{C}$, budget $B$
+  \Ensure Aligned dimensions $\{d_i\}_{i=1}^n$ with $d_i \in C_i$
+  \Statex \textit{Phase 1: Misaligned Compression}
+  \State Apply $\mathcal{C}(\mathcal{M})$ $\to$ misaligned dims $\{d_i^*\}$, scores $\{s_i\}$
+  \State Profile GeMM/SDPA $\to$ constraints (\S\ref{sec:analysis})
+  \Statex \textit{Phase 2: Candidate Generation}
+  \For{each weight $i = 1, \ldots, n$}
+    \State Sweep dims near $d_i^*$; measure latency
+    \State $C_i \gets$ dims avoiding perf.\ cliffs
+  \EndFor
+  \Statex \textit{Phase 3: Multi-Choice Knapsack DP}
+  \State $D[0..n][0..B] \gets -\infty$;\; $D[0][0] \gets 0$
+  \For{$i = 1$ to $n$}
+    \For{each $d_{ij} \in C_i$}
+      \State $v_{ij} \gets s_i \cdot (|W_i(d_{ij})| {-} |W_i^*|)$;\; $w_{ij} \gets |W_i(d_{ij})|$
+      \For{$b = w_{ij}$ to $B$}
+        \State $D[i][b] \gets \max\!\bigl(D[i][b],\; D[i{-}1][b{-}w_{ij}] + v_{ij}\bigr)$
+      \EndFor
+    \EndFor
+  \EndFor
+  \State Backtrack from $\arg\max_b D[n][b]$
+  \State \Return $\{d_i\}$
+  \end{algorithmic}
+  \end{algorithm}
+  
 To bridge the gap between compression and alignment, we propose \textbf{GAC} (GPU-Aligned Compression), a paradigm that makes budget allocation system-aware so that fewer parameters translate into real speedup.
-GAC wraps any dimension-reducing compressor as a post-processing pass, re-selecting dimensions to satisfy alignment constraint.
-Given an LLM + a compressor +  a compression budget, the pipeline produces a 100\%-aligned compressed model in three steps (Figure~\ref{fig:gac_framework}):\\
-\textbf{(1)~Unconstrained Compression}---Compress the model with misaligned dimensions $\{d_i^*\}$ and importance scores $\{s_i\}$.\\
-\textbf{(2)~Dimension Sweep}---For each misaligned weight, sweep near $d_i^*$ and retain only hardware-friendly candidates.\\
-\textbf{(3)~Constrained Optimization}---Formulate a knapsack problem and solve via dynamic programming (DP).
+GAC wraps any dimension-reducing compressor with a post-processing step, re-selecting dimensions to satisfy alignment constraint.
+Given a model $\mathcal{M}$ with $n$ compressible weights $\mathcal{W}$, a compressor $\mathcal{C}$, and a parameter budget $B {=} (1{-}\rho)\,|\mathcal{W}|$ ($\rho$: compression ratio), GAC produces a 100\%-aligned model via three steps (Figure~\ref{fig:gac_framework};).
+Algorithm~\ref{alg:gac} gives the complete procedure.
 
-\subsection{Problem Formulation}
+\subsection{Step 1: Misaligned Compression}
+\label{sec:step1}
 
-Given $n$ projections with importance scores $\{s_i\}$, ideal (unconstrained) dimensions $\{d_i^*\}$, and total parameter budget $B$, we seek aligned dimensions $\{d_i\}$ that maximize importance-weighted information preservation:
-\begin{equation}
-\max_{\{d_i\}} \sum_{i=1}^{n} s_i \cdot (d_i - d_i^*) \;\;\text{s.t.}\;\; \sum_{i} d_i \cdot g_i \leq B,\;\; d_i \in C_i
-\label{eq:gac}
-\end{equation}
-where $g_i$ is the group size for projection $i$ and $C_i$ is the set of hardware-friendly candidates.
-The objective is \emph{asymmetric}: rounding up ($d_i > d_i^*$) yields positive value (information preserved), while rounding down yields negative value (information lost), weighted by each layer's importance score.
-High-importance (sensitive) layers naturally receive larger dimensions; low-importance (insensitive) layers absorb the cost.
+We first apply $\mathcal{C}$ to $\mathcal{M}$ without alignment constraints.
+$\mathcal{C}$ can be any established dimension-reducing compressor---e.g., ASVD~\cite{asvd} (SVD factorization) or LLM-Pruner~\cite{llmpruner} (structured pruning).
+Internally, $\mathcal{C}$ computes a per-weight importance score $s_i$ using one of the proxies in Table~\ref{tab:importance_scores} (e.g., activation magnitude for ASVD, gradient-based Taylor expansion for LLM-Pruner), then allocates dimensions $\{d_i^*\}$ proportionally: higher $s_i$ retains a larger $d_i^*$.
+Because $s_i$ and the resulting $\{d_i^*\}$ are continuous, the compressed model is \emph{misaligned}.
 
-\subsection{Candidate Generation via Dimension Sweep}
+\subsection{Step 2:Dimension Sweep}
+\label{sec:step2}
 
-Rather than hard-coding alignment to fixed multiples (e.g., mod~8 or mod~32), GAC generates candidates empirically.
-For each projection, we profile GeMM and SDPA latency at dimensions near $d_i^*$ and retain only those that avoid performance cliffs.
-This produces $|C_i| \approx 11$--$17$ candidates per projection.
-Cliff dimensions---where cuBLAS switches kernel tier or SDPA falls back---are automatically excluded.
-For example, given an ideal dimension $d^*{=}107.3$, the sweep produces $C{=}\{96, 104, 112, 128\}$, excluding 107 because it triggers a cuBLAS performance cliff; the DP then picks $d{=}104$, saving budget for more sensitive layers.
+A na\"ive fix would round every $d_i^*$ to the nearest sweetpoint (e.g. multiple of) from the Constraints Table~\ref{tab:constraints}.
+However, we cannot hard-code alignment rounding rules because different operators exhibit different behavior across different platforms (e.g., GPU architecture, PyTorch version).
+A fixed heuristic that works on one platform may miss cliffs or exclude valid dimensions on another.
+
+Instead, GAC selects candidates \emph{empirically}.
+We use the heuristic constraints (e.g., $d \bmod 8 = 0$, $d \bmod 16 = 0$) to narrow the search space, then profile the kernel latency at each candidate near $d_i^*$ to verify it avoids performance cliffs on the \emph{actual} platform.
+This produces a candidate set $C_i$.
+For example, given $d_i^*{=}107.3$, the sweep yields $C_i{=}\{96, 104, 112, 128\}$: dimension 107 is excluded because it triggers a cuBLAS Tier-3 kernel (\S\ref{sec:library}), while 104 and 112 both land in Tier-1.
 Because the sweep is hardware-specific, GAC adapts to different GPU architectures without manual tuning.
 
-\subsection{Multi-Choice Knapsack DP}
+\subsection{Step 3: Constrained Optimization}
+\label{sec:step3}
+
+With misaligned dimensions $\{d_i^*\}$, importance scores $\{s_i\}$, and candidate sets $\{C_i\}$ in hand, we now select one aligned dimension per weight under the parameter budget.
+Na\"ive rounding (e.g., round each $d_i^*$ to the nearest candidate) ignores two factors: (1)~different weights have different sensitivities, and (2)~rounding up at one weight consumes budget that could be spent elsewhere.
+We therefore formulate a \emph{multi-choice knapsack} problem:
+\begin{equation}
+\max_{\{d_i\}} \sum_{i=1}^{n} s_i \cdot (|W_i| - |W_i^*|) \;\;\text{s.t.}\;\; \sum_{i} |W_i| \leq B,\;\; d_i \in C_i
+\label{eq:gac}
+\end{equation}
+where $|W_i|$ is the parameter count of weight $W_i$ at dimension $d_i$, $|W_i^*|$ at the misaligned dimension $d_i^*$, and $C_i$ is the candidate set from Step~2.
+The objective is \emph{asymmetric}: rounding up ($d_i > d_i^*$) preserves information (positive value), rounding down loses it (negative value), each scaled by the per-parameter importance $s_i$.
+This lets high-importance weights receive more parameters while low-importance weights absorb the cost.
 
 We solve Eq.~\ref{eq:gac} via dynamic programming.
-For each candidate $d_{ij} \in C_i$, define value $v_{ij} = s_i \cdot (d_{ij} - d_i^*)$ and weight $w_{ij} = d_{ij} \cdot g_i$.
-The DP recurrence is:
+For each candidate $d_{ij} \in C_i$, define value $v_{ij} = s_i \cdot (|W_i(d_{ij})| - |W_i^*|)$ and cost $w_{ij} = |W_i(d_{ij})|$.
+The recurrence is:
 \[
 D[i][b] = \max_{j} \left\{ D[i{-}1][b - w_{ij}] + v_{ij} \right\}
 \]
-Complexity: $O(n \cdot |C| \cdot B')$ where $B' = B/(a \cdot g)$ is the quantized budget ($a$: alignment granularity, $g$: group size).
-In practice, with $n{=}224$ projections and $|C| \approx 15$, the DP runs in under one second on CPU.
+with complexity $O(n \cdot |C| \cdot B')$ where $B'$ is the quantized budget.
+In practice ($n{=}224$, $|C| \approx 15$), the DP runs in under one second on CPU---negligible compared to the compression itself.
 
-Algorithm~\ref{alg:gac} gives the complete procedure.
-
-\begin{algorithm}[t]
-\caption{GAC algorithm ($<$1\,s on CPU for $n{=}224$).}
-\label{alg:gac}
-\small
-\begin{algorithmic}[1]
-\Require Pre-trained LLM, compressor, budget $B$
-\Ensure Aligned dimensions $\{d_i\}_{i=1}^n$ with $d_i \in C_i$
-\Statex \textit{Phase 1: Unconstrained Compression}
-\State Run compressor $\to$ ideal dims $\{d_i^*\}$, scores $\{s_i\}$
-\State Profile GeMM/SDPA $\to$ constraints (\S\ref{sec:analysis})
-\Statex \textit{Phase 2: Candidate Generation}
-\For{each projection $i = 1, \ldots, n$}
-  \State Sweep dims near $d_i^*$; measure latency
-  \State $C_i \gets$ dims avoiding perf.\ cliffs
-\EndFor
-\Statex \textit{Phase 3: Multi-Choice Knapsack DP}
-\State $B' \gets B / (a \cdot g)$
-\State $D[0..n][0..B'] \gets -\infty$;\; $D[0][0] \gets 0$
-\For{$i = 1$ to $n$}
-  \For{each $d_{ij} \in C_i$}
-    \State $v_{ij} \gets s_i \cdot (d_{ij} {-} d_i^*)$;\; $w_{ij} \gets d_{ij} \cdot g_i$
-    \For{$b = w_{ij}$ to $B'$}
-      \State $D[i][b] \gets \max\!\bigl(D[i][b],\; D[i{-}1][b{-}w_{ij}] + v_{ij}\bigr)$
-    \EndFor
-  \EndFor
-\EndFor
-\State Backtrack from $\arg\max_b D[n][b]$
-\State \Return $\{d_i\}$
-\end{algorithmic}
-\end{algorithm}
 
 
 %% ===========================================
