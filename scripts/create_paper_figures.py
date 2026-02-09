@@ -1037,8 +1037,8 @@ def fig_gemv_alignment(data_path='results/gemv_fine_sweep.json'):
         ax.set_ylabel('Latency (μs)', fontsize=7)
         ax.tick_params(labelsize=6)
         # Legend in lower-right of each panel
-        ax.legend(fontsize=5, loc='lower right', framealpha=0.8,
-                  ncol=1, handletextpad=0.3, borderpad=0.3, title_fontsize=5.5,
+        ax.legend(fontsize=6, loc='lower right', framealpha=0.8,
+                  ncol=1, handletextpad=0.3, borderpad=0.3, title_fontsize=6.5,
                   title='$K$ sweep' if sweep_key == 'K_sweep' else '$N$ sweep')
 
     axes[1].set_xlabel('Dimension', fontsize=7)

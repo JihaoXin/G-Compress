@@ -73,9 +73,11 @@
 
 \begin{abstract}
 Post-training compression reduces LLM parameter counts but often produces irregular tensor dimensions that degrade GPU performance---a phenomenon we call \emph{dimensional misalignment}.
-We present a full-stack analysis of this effect, identifying root causes at three levels: framework (PyTorch backend dispatch), library (cuBLAS kernel selection), and hardware (TensorCore and memory alignment).
-We propose \textbf{GAC} (GPU-Aligned Compression), a general framework that wraps any compressor and selects GPU-Aligned dimensions via multi-choice knapsack optimization.
-On Llama-3-8B with two representative compressors---ASVD (SVD factorization) and LLM-Pruner (structured pruning)---GAC achieves 100\% dimension alignment with up to 1.5$\times$ speedup while preserving model quality.
+We present a full-stack analysis tracing root causes at three levels: framework (e.g. PyTorch backend dispatch), library (e.g. cuBLAS kernel selection), and hardware (e.g. Tensor Core tile and L2 Cache sector).
+The key insight is that model inference becomes slower due to the resulting dimensions being incompatible with the GPU execution stack.
+For example, ASVD-compressed Llama-3-8B has 15\% fewer parameters yet runs no faster than the uncompressed baseline, because 95\% of its dimensions are misaligned.
+We propose \textbf{GAC} (GPU-Aligned Compression), a new compression paradigm that wraps any dimension-reducing compressor and re-selects hardware-aligned dimensions via multi-choice knapsack optimization under the same parameter budget.
+On Llama-3-8B with ASVD and LLM-Pruner, GAC achieves 100\% alignment, recovering up to 1.5$\times$ speedup while preserving model quality.
 \end{abstract}
 
 \keywords{LLM Compression, GPU Optimization}
@@ -91,19 +93,65 @@ On Llama-3-8B with two representative compressors---ASVD (SVD factorization) and
 \section{Introduction}
 \label{sec:intro}
 
-Large Language Models (LLMs) achieve strong capabilities but their scale poses deployment challenges~\cite{llama3}.
-Post-training compression reduces model size which can be categorized into three categories: \emph{quantization} (reduced precision)~\cite{gptq,awq}, \emph{sparsification} (zeroing weights)~\cite{sparsegpt,wanda}, and \emph{dimension reduction} (low-rank factorization, structured pruning, KV cache eviction)~\cite{asvd,palu,llmpruner,h2o,pyramidkv}.
-We focus on \textbf{dimension reduction}: it alters the tensor shapes that feed the dominant inference operators, which often produce \emph{irregular} dimensions (e.g., reduced rank from 128 to 107), which is inefficient in GPU's execution, and leads to a counterintuitive outcome: \emph{compressed models with \textbf{smaller} parameters can run \textbf{slower} than uncompressed models}. We term this \textbf{dimensional misalignment}.
-We summarize three classes of compression algorithms that lead to dimensional misalignment: \textbf{(i)}~low-rank factorization (decomposing weight matrices into two smaller matrices $W \approx A \cdot B$, truncating inner dimension),~\cite{asvd,palu,svdllm2024}; \textbf{(ii)}~structured pruning (removing neurons or heads, reducing output dimension),~\cite{llmpruner,sparsegpt,wanda}; \textbf{(iii)}~token eviction (dropping or compressing keys/values, reducing effective sequence length),~\cite{h2o,pyramidkv}.
+Large Language Models (LLMs) deliver strong capabilities, but their scale hinders deployment~\cite{llama3}.
+Post-training compression reduces model size and can be categorized into three families: \emph{quantization}~\cite{gptq,awq}, \emph{sparsification}~\cite{sparsegpt,wanda}, and \emph{dimension reduction}~\cite{asvd,palu,llmpruner,h2o,pyramidkv}.
+Quantization and sparsification preserve tensor shapes and are therefore compatible with existing GPU kernels.
+Dimension reduction, however, alters the tensor shapes often producing \emph{irregular} dimensions (e.g., dimension reduced from 128 to 107), which conflict with GPU execution primitives---Tensor Core tiles, cuBLAS kernels, and framework backend selection---causing a counterintuitive outcome: \emph{models with \textbf{fewer} parameters run \textbf{slower} than uncompressed ones}.
+We term this phenomenon \textbf{dimensional misalignment}.
 
-Existing compression methods predominantly trade off \emph{size and accuracy}: given a compression ratio, they maximize preserved accuracy while ignoring how chosen dimensions interact with hardware.
-We propose \textbf{GAC} (GPU-Aligned Compression), a new compression \emph{paradigm} that imposes hardware alignment constraints on top of existing dimension-reducing compressors: it wraps any such compressor and selects hardware-aligned dimensions under the same parameter budget, restoring speed without changing the compressor's accuracy-oriented design.
+\begin{figure}[t]
+\centering
+\resizebox{0.85\columnwidth}{!}{%
+\begin{tikzpicture}[
+    dim/.style={<->, line width=0.7pt, gray!80!black},
+    dlabel/.style={font=\sffamily\bfseries, fill=white, inner sep=1pt}]
+  % --- Matrix X: M rows x K cols ---
+  \fill[cblue!8] (0,0) rectangle (1.6,2.6);
+  \draw[line width=0.8pt] (0,0) rectangle (1.6,2.6);
+  \node at (0.8,1.3) {\large $\mathbf{X}$};
+  \draw[dim] (-0.4,0) -- (-0.4,2.6) node[midway, dlabel] {$M$};
+  \draw[dim] (0,3.0) -- (1.6,3.0) node[midway, dlabel] {$K$};
+  % dot
+  \node at (2.4,1.8) {\LARGE $\cdot$};
+  % --- Matrix W: K rows x N cols ---
+  \fill[cgreen!8] (3.2,1.0) rectangle (5.8,2.6);
+  \draw[line width=0.8pt] (3.2,1.0) rectangle (5.8,2.6);
+  \node at (4.5,1.8) {\large $\mathbf{W}$};
+  \draw[dim] (2.9,1.0) -- (2.9,2.6) node[midway, dlabel] {$K$};
+  \draw[dim] (3.2,3.0) -- (5.8,3.0) node[midway, dlabel] {$N$};
+  % equals
+  \node at (6.6,1.3) {\LARGE $=$};
+  % --- Matrix Y: M rows x N cols ---
+  \fill[corange!8] (7.4,0) rectangle (10.0,2.6);
+  \draw[line width=0.8pt] (7.4,0) rectangle (10.0,2.6);
+  \node at (8.7,1.3) {\large $\mathbf{Y}$};
+  \draw[dim] (7.1,0) -- (7.1,2.6) node[midway, dlabel] {$M$};
+  \draw[dim] (7.4,3.0) -- (10.0,3.0) node[midway, dlabel] {$N$};
+\end{tikzpicture}%
+}
+\caption{GEMM: $Y{=}X{\cdot}W$ with $X{\in}\mathbb{R}^{M \times K}$,
+$W{\in}\mathbb{R}^{K \times N}$.}
+\label{fig:gemm_dims}
+\end{figure}
+
+To see why, consider the one of the core operators in LLMs, GEMM (General Matrix Multiply) $Y{=}X{\cdot}W$ (Figure~\ref{fig:gemm_dims}), with sequence dimension~$M$, inner dimension~$K$, and output dimension~$N$.
+Three compression methods each target a different axis:
+\textbf{(i)}~low-rank factorization replaces $W$ with two factors $A{\cdot}B$, introducing a reduced rank $r$ as the inner dimension of two smaller GEMMs~\cite{asvd,palu,svdllm2024};
+\textbf{(ii)}~structured pruning removes neurons or attention heads, shrinking~$N$~\cite{llmpruner,sparsegpt,wanda};
+\textbf{(iii)}~token/KV eviction drops sequence entries, reducing~$M$~\cite{h2o,pyramidkv}.
+All three optimize \emph{size vs.\ accuracy} without checking whether the resulting dimensions satisfy GPU alignment constraints (e.g.\ $d \bmod 8 = 0$).
+The problem is pervasive: ASVD produces 95\% misaligned dimensions, and even LLM-Pruner---whose pruning granularity is relatively coarse---still leaves 17\% of weights misaligned (Table~\ref{tab:main_results}).
+Prior hardware-aware methods~\cite{halp2021,haloc2023} treat latency as a black-box signal, tying solutions to specific CNN architectures without isolating root causes or providing parameter-budget guarantees.
+
+We propose \textbf{GAC} (GPU-Aligned Compression), a new compression \emph{paradigm} that imposes hardware alignment constraints on top of any dimension-reducing compressor.
+GAC first identifies \emph{why} certain dimensions are slow through a full-stack analysis (\S\ref{sec:analysis}), then uses those insights to constrain a multi-choice knapsack optimizer that re-selects aligned dimensions under the same parameter budget.
+GAC is a compressor-agnostic framework with a post-processing step that restores speed without changing the upstream compressor's accuracy-oriented design.
 
 \noindent \textbf{Contributions.}\\
-\textbf{(1)}~We identify the \emph{dimensional misalignment} problem (\S\ref{sec:misalignment}).\\
-\textbf{(2)}~We conduct a systematic full-stack analysis (\S\ref{sec:analysis}).\\
-\textbf{(3)}~GAC formalizes the dimension selection as a constrained optimization with a dynamic programming solver (\S\ref{sec:gac}).\\
-\textbf{(4)}~Preliminary evaluation on Llama-3-8B shows up to 1.5$\times$ speedup (\S\ref{sec:eval}).
+\textbf{(1)}~We identify the \emph{dimensional misalignment} problem and demonstrate its prevalence across compressors (\S\ref{sec:misalignment}).\\
+\textbf{(2)}~We conduct a systematic full-stack analysis tracing root causes at the framework, library, and hardware levels (\S\ref{sec:analysis}).\\
+\textbf{(3)}~We formalize dimension selection as a constrained optimization and provide a dynamic programming solver (\S\ref{sec:gac}).\\
+\textbf{(4)}~Preliminary evaluation on Llama-3-8B achieves up to 1.5$\times$ speedup without sacrificing accuracy (\S\ref{sec:eval}).
 
 
 %% ===========================================
@@ -135,7 +183,7 @@ Second, allocate the budget $B$ by assigning each $W_i$ a dimension $d_i$ thus t
 \{d_i\} = \arg\max_{\{d_i\}} \sum_i s_i \cdot |W_i| \quad \text{s.t.} \quad |\mathcal{W}'| \leq B, \quad d_i \geq 0.
 \label{eq:budget_allocation}
 \end{equation}
-Here $d_i$ is the compressed dimension (e.g., inner rank or output width, varies by compression method), $|W_i|$ is the parameter count given dimension $d_i$, $|\mathcal{W}'| = \sum_i |W_i|$ is the total parameter count of the compressed model, and $B$ is the parameter budget.
+Here $d_i$ is the compressed dimension (e.g., inner dimension or output width, varies by compression method), $|W_i|$ is the parameter count given dimension $d_i$, $|\mathcal{W}'| = \sum_i |W_i|$ is the total parameter count of the compressed model, and $B$ is the parameter budget.
 Because $s_i$ and the optimum $\{d_i\}$ are continuous, the resulting dimensions are typically \emph{irregular} (e.g., 107, 108, 109) and often violate GPU alignment requirements (e.g.\ $d \bmod 8 = 0$), triggering backend fallbacks and kernel switches that erase the expected speedup from fewer parameters and FLOPs.
 
 We demonstrate the dimensional misalignment problem with a real-world example: PaLU~\cite{palu}.
@@ -181,18 +229,18 @@ Root causes fall into three layers (Figure~\ref{fig:fullstack_overview}): Framew
 \begin{figure}[t]
   \centering
   \begin{tikzpicture}[
-      box/.style={draw=gray!60, rounded corners=5pt, minimum width=2.0cm, minimum height=0.8cm,
-                  line width=0.8pt, font=\sffamily\footnotesize\bfseries, align=center, inner sep=4pt},
+      box/.style={draw=gray!60, rounded corners=5pt, minimum width=1.8cm, minimum height=1.2cm,
+                  line width=0.8pt, font=\sffamily\footnotesize, align=center, inner sep=3pt},
       >=stealth, arrow/.style={->, line width=1.2pt, gray!55},
       lbl/.style={font=\sffamily\scriptsize, text=gray!40!black, above=1pt}
     ]
-    \node[box, fill=cblue!18] (fw) at (0,0) {Framework};
-    \node[box, fill=corange!18] (lib) at (3.0,0) {Library};
-    \node[box, fill=cred!18] (hw) at (6.0,0) {Hardware};
+    \node[box, fill=cblue!18] (fw) at (0,0) {Framework\\[1pt]\scriptsize\color{gray!60!black}FlashAttention\\\scriptsize\color{gray!60!black}Math};
+    \node[box, fill=corange!18] (lib) at (2.8,0) {Library\\[1pt]\scriptsize\color{gray!60!black}cuBLAS\\\scriptsize\color{gray!60!black}CUTLASS};
+    \node[box, fill=cred!18] (hw) at (5.6,0) {Hardware\\[1pt]\scriptsize\color{gray!60!black}Tensor Core\\\scriptsize\color{gray!60!black}CUDA Core};
     \draw[arrow] (fw) -- (lib) node[midway, lbl] {Dispatch};
     \draw[arrow] (lib) -- (hw) node[midway, lbl] {Execute};
   \end{tikzpicture}
-  \caption{Hierarchical Analysis.}
+  \caption{PyTorch SDPA execution stack.}
   \label{fig:fullstack_overview}
   \end{figure}
 
