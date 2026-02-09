@@ -143,9 +143,9 @@ All three optimize \emph{size vs.\ accuracy} without checking whether the result
 The problem is pervasive: ASVD produces 95\% misaligned dimensions, and even LLM-Pruner---whose pruning granularity is relatively coarse---still leaves 17\% of weights misaligned (Table~\ref{tab:main_results}).
 Prior hardware-aware methods~\cite{halp2021,haloc2023} treat latency as a black-box signal, tying solutions to specific CNN architectures without isolating root causes or providing parameter-budget guarantees.
 
-We propose \textbf{GAC} (GPU-Aligned Compression), a new compression \emph{paradigm} that imposes hardware alignment constraints on top of any dimension-reducing compressor.
-GAC first identifies \emph{why} certain dimensions are slow through a full-stack analysis (\S\ref{sec:analysis}), then uses those insights to constrain a multi-choice knapsack optimizer that re-selects aligned dimensions under the same parameter budget.
-GAC is a compressor-agnostic framework with a post-processing step that restores speed without changing the upstream compressor's accuracy-oriented design.
+We propose \textbf{GAC} (GPU-Aligned Compression), a compression \emph{paradigm} that imposes hardware alignment constraints on any dimension-reducing compressor.
+GAC first identifies \emph{why} certain dimensions are slow via a full-stack analysis (\S\ref{sec:analysis}), then constrains a multi-choice knapsack optimizer to re-select aligned dimensions under the same parameter budget.
+GACis a compressor-agnostic framework that restores speed without changing the upstream compressor's design.
 
 \noindent \textbf{Contributions.}\\
 \textbf{(1)}~We identify the \emph{dimensional misalignment} problem and demonstrate its prevalence across compressors (\S\ref{sec:misalignment}).\\
@@ -190,7 +190,7 @@ We demonstrate the dimensional misalignment problem with a real-world example: P
 We use \textbf{8-alignment} ($d \bmod 8 = 0$) as an example of alignment constraints. When dimensions are not 8-aligned, latency can increase by up to 90\% (Figure~\ref{fig:sdpa_latency}); we detail this analysis in \S\ref{sec:analysis}.
 Figure~\ref{fig:palu_dist} shows that a large fraction of layers end up misaligned (e.g., 78\% in this setup).
 For generality, we summarize the mainstream importance score proxies into four categories (Table~\ref{tab:importance_scores}).
-We empirically measure unconstrained dimension allocation on Llama-3-8B at $\rho=20\%$ with all four proxies, Figure~\ref{fig:dim_scatter} demonstrates the dimensional misalignment consistently occurs across different methods.
+We empirically measure unconstrained dimension allocation on Llama-3-8B at $\rho{=}20\%$ with all four proxies; Figure~\ref{fig:dim_scatter} demonstrates that misalignment consistently occurs across methods.  Appendix~\ref{app:scatter_ratios} shows the misalignment persists across compression ratios $\rho \in [10\%, 50\%]$.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig3_palu_dist.png}
@@ -255,7 +255,7 @@ In this section, we exemplify this issue via PyTorch's \textbf{SDPA} (Scaled Dot
 where $Q$, $K$, $V$ are the query, key, and value matrices and $d_k$ is the per-head dimension.
 When one calls the SDPA API \footnote{\texttt{torch.nn.functional.scaled\_dot\_product\_attention(Q, K, V)}} , PyTorch may select an optimized implementation (e.g., FlashAttention) or fall back to a naive eager implementation (the ``Math'' backend).
 
-We measured SDPA latency with inputs $Q,K,V$ of shape $(B, S, H, d)$: batch $B{=}4$, sequence length $S{=}2048$, number of heads $H{=}32$, and we sweep the per-head dimension $d$ from 64 to 256 (full sweep details in Appendix~\ref{app:fa2_templates}).
+We measured SDPA latency with inputs $Q,K,V$ of shape $(B, S, H, d)$: batch $B{=}4$, sequence length $S{=}2048$, number of heads $H{=}32$, and we sweep the per-head dimension $d$ from 64 to 256 (Table~\ref{tab:fa2_templates}).
 We observed a staircase pattern (Figure~\ref{fig:sdpa_latency}).
 First, multiples of 8 are faster: e.g., $d{=}129$ incurs $\sim$90\% higher latency than $d{=}128$.
 Profiling shows that PyTorch uses FlashAttention only when $d \bmod 8 = 0$; otherwise it falls back to the Math kernel.
@@ -268,6 +268,24 @@ In the figure, alternating background shades denote template regions; labels suc
   \label{fig:sdpa_latency}
   \end{figure}
 
+\begin{table}[t]
+\centering
+\caption{FA2 template tiers and performance ($B{=}4$, $S{=}2048$, $H{=}32$).}
+\label{tab:fa2_templates}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llrrr@{}}
+\toprule
+Region & Template & $B_r \times B_c$ & Latency & vs.\ $t{=}64$ \\
+\midrule
+$d{=}64$ & 64 & 128$\times$128 & 0.74\,ms & 1.0$\times$ \\
+$d \in (64,96]$ & 96 & 128$\times$64 & 1.12\,ms & 1.5$\times$ \\
+$d \in (96,128]$ & 128 & 128$\times$64 & 1.47\,ms & 2.0$\times$ \\
+$d \in (128,160]$ & 160 & 128$\times$32 & 2.00\,ms & 2.7$\times$ \\
+$d \in (160,256]$ & 192--256 & 128$\times$32 & 2.3--2.9\,ms & 3--4$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Library Layer}
 \label{sec:library}
@@ -575,82 +593,38 @@ Validating GAC under optimized serving engines (e.g., vLLM~\cite{vllm}, TensorRT
 %% ===========================================
 %% APPENDIX
 %% ===========================================
+\clearpage
 \appendix
-
-\section{FA2 Template Tiers and Dimension Sweep}
-\label{app:fa2_templates}
-
-We sweep \texttt{head\_dim} from 64 to 256 with $B{=}4$, $S{=}2048$, $H{=}32$.
-FlashAttention-2 selects the smallest template $t \geq d$; tile width $B_c$ halves at boundaries (e.g., $128 \to 64 \to 32$), so crossing $d{=}128 \to 129$ causes $\sim$90\% latency increase.
-Non-8-aligned dimensions trigger the MATH fallback (e.g., $d{=}107$ incurs 2.14\,ms, +40\% vs $d{=}112$ at 1.53\,ms on Flash).
-Table~\ref{tab:fa2_templates} quantifies the tiers.
-
-\begin{table}[h]
-\centering
-\caption{FA2 template tiers and performance ($B{=}4$, $S{=}2048$, $H{=}32$).}
-\label{tab:fa2_templates}
-\small
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}llrrr@{}}
-\toprule
-Region & Template & $B_r \times B_c$ & Latency & vs.\ $t{=}64$ \\
-\midrule
-$d{=}64$ & 64 & 128$\times$128 & 0.74\,ms & 1.0$\times$ \\
-$d \in (64,96]$ & 96 & 128$\times$64 & 1.12\,ms & 1.5$\times$ \\
-$d \in (96,128]$ & 128 & 128$\times$64 & 1.47\,ms & 2.0$\times$ \\
-$d \in (128,160]$ & 160 & 128$\times$32 & 2.00\,ms & 2.7$\times$ \\
-$d \in (160,256]$ & 192--256 & 128$\times$32 & 2.3--2.9\,ms & 3--4$\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-
-\section{Dimension Distribution of Evaluated Methods}
-\label{app:dims}
-
-Figure~\ref{fig:dim_distribution} shows per-layer dimension distributions for ASVD (224 projections) and LLM-Pruner (28 pruned MLP layers).
-ASVD dimensions range from 300 to 3,185 with 0\% initial alignment; LLM-Pruner from 5,931 to 14,336 with 83\% alignment.
-
-\begin{figure*}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{figures/fig_dim_distribution.pdf}
-\caption{Per-layer dimension distributions for ASVD (top) and LLM-Pruner (bottom).}
-\label{fig:dim_distribution}
-\end{figure*}
-
-
-\section{SVD Rank Distribution Across Compression Ratios}
+\onecolumn
+\section{Compressed Dimension Across Compression Ratios}
 \label{app:scatter_ratios}
-
 The misalignment problem persists across different compression ratios.
-Figure~\ref{fig:scatter_ratios} shows dimension scatter plots for Llama-3-8B under unconstrained SVD allocation at five compression levels ($\rho=0.5$, 0.6, 0.7, 0.8, 0.9) using Fisher importance scores.
+Figure~\ref{fig:scatter_ratios} shows dimension scatter plots for Llama-3-8B under unconstrained SVD allocation at four compression levels ($\rho{=}10\%$, $20\%$, $30\%$, $50\%$) using Fisher importance scores.
 At every ratio, a substantial fraction (40--80\%) of dimensions are misaligned, confirming that dimensional misalignment is inherent to importance-based rank allocation, not an artifact of aggressive compression.
 
 \begin{figure*}[h]
 \centering
 \begin{subfigure}[t]{\textwidth}
 \includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.5.pdf}
-\caption{Llama-3-8B, $r$=0.5 (50\% compression)}
+\caption{Llama-3-8B, $\rho=50\%$}
 \end{subfigure}
 
-\vspace{4pt}
 \begin{subfigure}[t]{\textwidth}
 \includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.7.pdf}
-\caption{Llama-3-8B, $r$=0.7 (30\% compression)}
+\caption{Llama-3-8B, $\rho=40\%$}
 \end{subfigure}
 
-\vspace{4pt}
+\begin{subfigure}[t]{\textwidth}
+\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.8.pdf}
+\caption{Llama-3-8B, $\rho=30\%$}
+\end{subfigure}
+
 \begin{subfigure}[t]{\textwidth}
 \includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.9.pdf}
-\caption{Llama-3-8B, $r$=0.9 (10\% compression)}
+\caption{Llama-3-8B, $\rho=10\%$}
 \end{subfigure}
 
-\vspace{4pt}
-\begin{subfigure}[t]{\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_1x4_mistral_7b_v0_3_r0.8.pdf}
-\caption{Mistral-7B, $\rho=0.8$ (cross-model)}
-\end{subfigure}
-\caption{SVD rank distributions across compression ratios and models.}
+\caption{Compressed dimension distributions across compression ratios.}
 \label{fig:scatter_ratios}
 \end{figure*}
 
