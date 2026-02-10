@@ -28,7 +28,7 @@ echo "Environment:"
 python --version
 nvidia-smi
 
-cd /home/xinj/GAC/third_party/ASVD4LLM
+cd /home/xinj/GAC
 mkdir -p cache
 
 # Parameters
@@ -41,7 +41,7 @@ echo ""
 echo "============================================="
 echo "Step 1: Evaluate baseline model"
 echo "============================================="
-python asvd_simple.py \
+python scripts/asvd_simple/asvd_simple.py \
     --model_id $MODEL \
     --raw_model \
     --eval_ppl wikitext2 \
@@ -52,7 +52,7 @@ echo ""
 echo "============================================="
 echo "Step 2: ASVD with rank_align=1 (unaligned)"
 echo "============================================="
-python asvd_simple.py \
+python scripts/asvd_simple/asvd_simple.py \
     --model_id $MODEL \
     --param_ratio_target $RATIO \
     --n_calib_samples $CALIB_SAMPLES \
@@ -72,7 +72,7 @@ echo ""
 echo "============================================="
 echo "Step 3: ASVD with rank_align=8 (aligned)"
 echo "============================================="
-python asvd_simple.py \
+python scripts/asvd_simple/asvd_simple.py \
     --model_id $MODEL \
     --param_ratio_target $RATIO \
     --n_calib_samples $CALIB_SAMPLES \

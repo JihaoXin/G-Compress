@@ -15,10 +15,11 @@ import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Add third_party to path
+# Add local ASVD wrappers first, then third_party dependencies.
 SCRIPT_DIR = Path(__file__).parent.parent
-sys.path.insert(0, str(SCRIPT_DIR / "third_party" / "ASVD4LLM"))
 sys.path.insert(0, str(SCRIPT_DIR / "third_party" / "LLM-Pruner"))
+sys.path.insert(0, str(SCRIPT_DIR / "third_party" / "ASVD4LLM"))
+sys.path.insert(0, str(SCRIPT_DIR / "scripts" / "asvd_simple"))
 
 
 def measure_decode_latency(model, tokenizer, prompt_len=128, gen_tokens=64,

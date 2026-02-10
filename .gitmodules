@@ -1,9 +1,12 @@
 [submodule "third_party/RAP"]
 	path = third_party/RAP
-	url = /home/xinj/rap
+	url = https://github.com/JihaoXin/RAP.git
 [submodule "third_party/SVD-LLM"]
 	path = third_party/SVD-LLM
 	url = https://github.com/AIoT-MLSys-Lab/SVD-LLM.git
 [submodule "third_party/LLM-Pruner"]
 	path = third_party/LLM-Pruner
 	url = https://github.com/horseee/LLM-Pruner.git
+[submodule "third_party/ASVD4LLM"]
+	path = third_party/ASVD4LLM
+	url = https://github.com/hahnyuan/ASVD4LLM.git
