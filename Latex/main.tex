@@ -596,31 +596,30 @@ Validating GAC under optimized serving engines (e.g., vLLM~\cite{vllm}, TensorRT
 \clearpage
 \appendix
 \onecolumn
-\section{Compressed Dimension Across Compression Ratios}
+\section{Dimensional Misalignment Persists Across Compression Ratios}
 \label{app:scatter_ratios}
 The misalignment problem persists across different compression ratios.
-Figure~\ref{fig:scatter_ratios} shows dimension scatter plots for Llama-3-8B under unconstrained SVD allocation at four compression levels ($\rho{=}10\%$, $20\%$, $30\%$, $50\%$) using Fisher importance scores.
-At every ratio, a substantial fraction (40--80\%) of dimensions are misaligned, confirming that dimensional misalignment is inherent to importance-based rank allocation, not an artifact of aggressive compression.
-
+Figure~\ref{fig:scatter_ratios} shows dimension scatter plots for Llama-3-8B under unconstrained SVD allocation at four compression levels ($\rho{=}10\%$, $30\%$, $40\%$, $50\%$) using Fisher importance scores.
+At every ratio, a substantial fraction of dimensions are misaligned, confirming that dimensional misalignment is inherent to importance-based rank allocation, not an artifact of aggressive compression.
 \begin{figure*}[h]
 \centering
 \begin{subfigure}[t]{\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.5.pdf}
+\includegraphics[width=0.9\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.5.pdf}
 \caption{Llama-3-8B, $\rho=50\%$}
 \end{subfigure}
-
+\vspace{-0.2cm}
 \begin{subfigure}[t]{\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.7.pdf}
+\includegraphics[width=0.9\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.7.pdf}
 \caption{Llama-3-8B, $\rho=40\%$}
 \end{subfigure}
-
+\vspace{-0.2cm}
 \begin{subfigure}[t]{\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.8.pdf}
+\includegraphics[width=0.9\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.8.pdf}
 \caption{Llama-3-8B, $\rho=30\%$}
 \end{subfigure}
-
+\vspace{-0.2cm}
 \begin{subfigure}[t]{\textwidth}
-\includegraphics[width=\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.9.pdf}
+\includegraphics[width=0.9\textwidth]{figures/scatter_1x4_meta_llama_3_8b_instruct_r0.9.pdf}
 \caption{Llama-3-8B, $\rho=10\%$}
 \end{subfigure}
 
