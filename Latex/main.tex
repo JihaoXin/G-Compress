@@ -445,7 +445,7 @@ $\mathcal{F}$ can be any established dimension-reducing compressor---e.g., ASVD~
 Internally, $\mathcal{F}$ computes a per-weight importance score $s_i$ using one of the proxies in Table~\ref{tab:importance_scores} (e.g., activation magnitude for ASVD, gradient-based Taylor expansion for LLM-Pruner), then allocates dimensions $\{d_i^*\}$ proportionally: higher $s_i$ retains a larger $d_i^*$.
 Because $s_i$ and the resulting $\{d_i^*\}$ are continuous, the compressed model is \emph{misaligned}.
 
-\subsection{Step 2:Dimension Sweep}
+\subsection{Step 2: Dimension Sweep}
 \label{sec:step2}
 
 A na\"ive fix would round every $d_i^*$ to the nearest sweetpoint (e.g. multiple of)
